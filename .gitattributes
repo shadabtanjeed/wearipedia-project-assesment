@@ -1,6 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
-Data/Raw[[:space:]]Data/complete_user1_raw.json filter=lfs diff=lfs merge=lfs -text
-Data/Raw[[:space:]]Data/hr_user1_raw.json filter=lfs diff=lfs merge=lfs -text
-Data/Raw[[:space:]]Data/complete_user2_raw.json filter=lfs diff=lfs merge=lfs -text
-Data/Raw[[:space:]]Data/hr_user2_raw.json filter=lfs diff=lfs merge=lfs -text
+# Data/Raw[[:space:]]Data/complete_user1_raw.json filter=lfs diff=lfs merge=lfs -text
+# Data/Raw[[:space:]]Data/hr_user1_raw.json filter=lfs diff=lfs merge=lfs -text
+# Data/Raw[[:space:]]Data/complete_user2_raw.json filter=lfs diff=lfs merge=lfs -text
+# Data/Raw[[:space:]]Data/hr_user2_raw.json filter=lfs diff=lfs merge=lfs -text
