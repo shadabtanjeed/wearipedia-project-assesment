@@ -79,4 +79,10 @@ The following files are not tracked by git:
 - Data/Raw Data/complete_user2_raw.json
 - Data/Raw Data/hr_user2_raw.json
 
-Since these files are required for the next tasks, an alternative way to access them will be provided in the corresponding task's README.
+However, these files are being tracked by DVC (Data Version Control) and are stored in Google Drive.
+
+To add this data to your local environment, you need to follow these steps:
+```bash
+pip install dvc dvc-gdrive
+dvc pull
+```
