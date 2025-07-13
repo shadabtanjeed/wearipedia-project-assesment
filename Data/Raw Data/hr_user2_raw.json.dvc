@@ -1,0 +1,5 @@
+outs:
+- md5: 7b35a6001402a6a228dc91b93be898cf
+  size: 108731251
+  hash: md5
+  path: hr_user2_raw.json
