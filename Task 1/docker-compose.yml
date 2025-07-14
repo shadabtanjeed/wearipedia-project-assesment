@@ -39,11 +39,10 @@ services:
       - CATCH_UP_MODE=${CATCH_UP_MODE:-false}
       # Set RESET_MODE to "true" to run in reset mode
       - RESET_MODE=${RESET_MODE:-false}
-      # Add this environment variable to fix the data path
       - DATA_DIR=/app/Data/Modified\ Data
     volumes:
       - .:/app
-      - ../Data:/app/Data  # Changed to mount from parent directory
+      - ../Data:/app/Data
     depends_on:
       timescaledb:
         condition: service_healthy

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Wait for database to be ready
+
 echo "Waiting for database to be ready..."
 until pg_isready -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME; do
     echo "Database is not ready yet. Waiting..."
@@ -9,7 +9,7 @@ done
 
 echo "Database is ready!"
 
-# Check if we're in test mode
+
 if [ "$TEST_MODE" = "true" ]; then
     echo "Running in TEST MODE - will process daily data with 2 minute intervals"
     # Run ingestion in test mode
