@@ -5,7 +5,6 @@ import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 
-
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
@@ -15,7 +14,6 @@ logger = logging.getLogger("SourceAdapter")
 # base class
 class SourceAdapter(ABC):
     @abstractmethod
-    # Retrieve data for the specified metric type and date range.
     def get_data(
         self,
         metric_type: str,
@@ -23,10 +21,8 @@ class SourceAdapter(ABC):
         end_date: Optional[datetime] = None,
         user_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-
         pass
 
-    # Returns list of supported metric types by this adapter.
     @abstractmethod
     def get_supported_metrics(self) -> List[str]:
         pass
@@ -125,13 +121,17 @@ class SyntheticFitbitAdapter(SourceAdapter):
 # Factory for creating source adapters based on device type.
 class SourceAdapterFactory:
     @staticmethod
-    def get_adapter(device_type: str, **kwargs) -> SourceAdapter:
+    def create_adapter(device_type: str, **kwargs) -> SourceAdapter:
         device_type = device_type.lower()
 
-        if device_type == "fitbit":
-
+        if device_type == "fitbit" or device_type == "synthetic":
             # For now, we're using the synthetic data adapter
             data_dir = kwargs.get("data_dir", os.path.join("Data", "Modified Data"))
             return SyntheticFitbitAdapter(data_dir)
         else:
             raise ValueError(f"Unsupported device type: {device_type}")
+
+    @staticmethod
+    def get_adapter(device_type: str, **kwargs) -> SourceAdapter:
+        """Legacy method name for backward compatibility"""
+        return SourceAdapterFactory.create_adapter(device_type, **kwargs)
