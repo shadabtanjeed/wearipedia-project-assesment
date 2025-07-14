@@ -4,7 +4,9 @@
 
 This project implements a daily, delta-load pipeline for ingesting Fitbit health metrics into a local TimescaleDB instance. It supports batch and incremental loads, automates ingestion via cron, and uses Docker for portability and reproducibility.
 
-Mentionable, the pipeline is designed to work with synthetic data files generated in Task 0b, simulating Fitbit health metrics for two users. The pipeline can be extended to support additional devices and metrics in the future.
+The pipeline is designed to work with synthetic data files generated in Task 0b, simulating Fitbit health metrics for two users. 
+
+Due to memory limitations on my local machine, I was able to ingest approximately 10-15 days worth of data. The ingestion process is technically sound, but handling larger volumes would require more resources or further optimization.
 
 ---
 
@@ -26,19 +28,19 @@ wearipedia-project-assesment/
 ├── Task 0a/                # Data volume analysis
 ├── Task 0b/                # Synthetic data generation
 └── Task 1/                 # Data ingestion pipeline
-    ├── crontab
-    ├── db_operations.py
-    ├── device_manager.py
-    ├── docker-compose.yml
-    ├── Dockerfile
-    ├── entrypoint.sh
-    ├── example_json.txt
-    ├── fix_source_adapter.py
-    ├── ingestions.py
-    ├── json_structure.txt
-    ├── models.py
-    ├── schema.sql
-    └── source_adapter.py
+  ├── crontab
+  ├── db_operations.py
+  ├── device_manager.py
+  ├── docker-compose.yml
+  ├── Dockerfile
+  ├── entrypoint.sh
+  ├── example_json.txt
+  ├── fix_source_adapter.py
+  ├── ingestions.py
+  ├── json_structure.txt
+  ├── models.py
+  ├── schema.sql
+  └── source_adapter.py
 ```
 
 ---
@@ -71,62 +73,62 @@ wearipedia-project-assesment/
    ```
 2. Ensure data files are in `Data/Modified Data`.
 
-    The following files are not tracked by git:
+  The following files are not tracked by git:
 
-    - Data/Raw Data/complete_user1_raw.json
-    - Data/Raw Data/hr_user1_raw.json
-    - Data/Raw Data/complete_user2_raw.json
-    - Data/Raw Data/hr_user2_raw.json
+  - Data/Raw Data/complete_user1_raw.json
+  - Data/Raw Data/hr_user1_raw.json
+  - Data/Raw Data/complete_user2_raw.json
+  - Data/Raw Data/hr_user2_raw.json
 
-    ## Downloading the Data Files
+  ## Downloading the Data Files
 
-    You can obtain the required data files using the following instructions, depending on your operating system.
+  You can obtain the required data files using the following instructions, depending on your operating system.
 
-    ### Windows
+  ### Windows
 
-    ```powershell
-    # Create the directory if it doesn't exist
-    New-Item -Path "Data/Raw Data" -ItemType Directory -Force
+  ```powershell
+  # Create the directory if it doesn't exist
+  New-Item -Path "Data/Raw Data" -ItemType Directory -Force
 
-    # Download the files
-    Invoke-WebRequest -Uri "https://drive.google.com/uc?export=download&id=17JDEIkw29NgXiyFmowiQv9E68_pKWwGc" -OutFile "Data/Raw Data/complete_user1_raw.json"
-    Invoke-WebRequest -Uri "https://drive.google.com/uc?export=download&id=1uDgV2LYx8UNOCq-JtgbFg-PYQgUaLde2" -OutFile "Data/Raw Data/hr_user1_raw.json"
-    Invoke-WebRequest -Uri "https://drive.google.com/uc?export=download&id=13VVG80CODeIiH02Mw2ihuFmQWLvHeJ2h" -OutFile "Data/Raw Data/complete_user2_raw.json"
-    Invoke-WebRequest -Uri "https://drive.google.com/uc?export=download&id=1eFTYoqBpcV1T_4cie8qTZ-LgIsjPpLjd" -OutFile "Data/Raw Data/hr_user2_raw.json"
+  # Download the files
+  Invoke-WebRequest -Uri "https://drive.google.com/uc?export=download&id=17JDEIkw29NgXiyFmowiQv9E68_pKWwGc" -OutFile "Data/Raw Data/complete_user1_raw.json"
+  Invoke-WebRequest -Uri "https://drive.google.com/uc?export=download&id=1uDgV2LYx8UNOCq-JtgbFg-PYQgUaLde2" -OutFile "Data/Raw Data/hr_user1_raw.json"
+  Invoke-WebRequest -Uri "https://drive.google.com/uc?export=download&id=13VVG80CODeIiH02Mw2ihuFmQWLvHeJ2h" -OutFile "Data/Raw Data/complete_user2_raw.json"
+  Invoke-WebRequest -Uri "https://drive.google.com/uc?export=download&id=1eFTYoqBpcV1T_4cie8qTZ-LgIsjPpLjd" -OutFile "Data/Raw Data/hr_user2_raw.json"
 
-    Write-Host "All data files downloaded successfully!" -ForegroundColor Green
-    ```
+  Write-Host "All data files downloaded successfully!" -ForegroundColor Green
+  ```
 
-    ### Linux / macOS
+  ### Linux / macOS
 
-    ```bash
-    # Create the directory if it doesn't exist
-    mkdir -p "Data/Raw Data"
+  ```bash
+  # Create the directory if it doesn't exist
+  mkdir -p "Data/Raw Data"
 
-    # Download the files
-    curl -L "https://drive.google.com/uc?export=download&id=17JDEIkw29NgXiyFmowiQv9E68_pKWwGc" -o "Data/Raw Data/complete_user1_raw.json"
-    curl -L "https://drive.google.com/uc?export=download&id=1uDgV2LYx8UNOCq-JtgbFg-PYQgUaLde2" -o "Data/Raw Data/hr_user1_raw.json"
-    curl -L "https://drive.google.com/uc?export=download&id=13VVG80CODeIiH02Mw2ihuFmQWLvHeJ2h" -o "Data/Raw Data/complete_user2_raw.json"
-    curl -L "https://drive.google.com/uc?export=download&id=1eFTYoqBpcV1T_4cie8qTZ-LgIsjPpLjd" -o "Data/Raw Data/hr_user2_raw.json"
+  # Download the files
+  curl -L "https://drive.google.com/uc?export=download&id=17JDEIkw29NgXiyFmowiQv9E68_pKWwGc" -o "Data/Raw Data/complete_user1_raw.json"
+  curl -L "https://drive.google.com/uc?export=download&id=1uDgV2LYx8UNOCq-JtgbFg-PYQgUaLde2" -o "Data/Raw Data/hr_user1_raw.json"
+  curl -L "https://drive.google.com/uc?export=download&id=13VVG80CODeIiH02Mw2ihuFmQWLvHeJ2h" -o "Data/Raw Data/complete_user2_raw.json"
+  curl -L "https://drive.google.com/uc?export=download&id=1eFTYoqBpcV1T_4cie8qTZ-LgIsjPpLjd" -o "Data/Raw Data/hr_user2_raw.json"
 
-    echo "All data files downloaded successfully!"
-    ```
+  echo "All data files downloaded successfully!"
+  ```
 
-    ### Using wget
+  ### Using wget
 
-    ```bash
-    # Create the directory if it doesn't exist
-    mkdir -p "Data/Raw Data"
+  ```bash
+  # Create the directory if it doesn't exist
+  mkdir -p "Data/Raw Data"
 
-    # Download the files
-    wget -O "Data/Raw Data/complete_user1_raw.json" "https://drive.google.com/uc?export=download&id=17JDEIkw29NgXiyFmowiQv9E68_pKWwGc"
-    wget -O "Data/Raw Data/hr_user1_raw.json" "https://drive.google.com/uc?export=download&id=1uDgV2LYx8UNOCq-JtgbFg-PYQgUaLde2"
-    wget -O "Data/Raw Data/complete_user2_raw.json" "https://drive.google.com/uc?export=download&id=13VVG80CODeIiH02Mw2ihuFmQWLvHeJ2h"
-    wget -O "Data/Raw Data/hr_user2_raw.json" "https://drive.google.com/uc?export=download&id=1eFTYoqBpcV1T_4cie8qTZ-LgIsjPpLjd"
+  # Download the files
+  wget -O "Data/Raw Data/complete_user1_raw.json" "https://drive.google.com/uc?export=download&id=17JDEIkw29NgXiyFmowiQv9E68_pKWwGc"
+  wget -O "Data/Raw Data/hr_user1_raw.json" "https://drive.google.com/uc?export=download&id=1uDgV2LYx8UNOCq-JtgbFg-PYQgUaLde2"
+  wget -O "Data/Raw Data/complete_user2_raw.json" "https://drive.google.com/uc?export=download&id=13VVG80CODeIiH02Mw2ihuFmQWLvHeJ2h"
+  wget -O "Data/Raw Data/hr_user2_raw.json" "https://drive.google.com/uc?export=download&id=1eFTYoqBpcV1T_4cie8qTZ-LgIsjPpLjd"
 
-    echo "All data files downloaded successfully!"
-    ```
-    You can also download the files manually from the links provided in the `Data/Raw Data` directory: https://drive.google.com/drive/folders/1883VBRmFepECPhCCWwYBObX7BW7li8VK?usp=drive_link
+  echo "All data files downloaded successfully!"
+  ```
+  You can also download the files manually from the links provided in the `Data/Raw Data` directory: https://drive.google.com/drive/folders/1883VBRmFepECPhCCWwYBObX7BW7li8VK?usp=drive_link
 
 3. Build and run containers:
    ```sh
@@ -217,33 +219,40 @@ wearipedia-project-assesment/
 Example:
 ```sql
 CREATE TABLE IF NOT EXISTS USERS (
-    USER_ID INT PRIMARY KEY,
-    USERNAME VARCHAR(255),
-    EMAIL VARCHAR(255),
-    CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  USER_ID INT PRIMARY KEY,
+  USERNAME VARCHAR(255),
+  EMAIL VARCHAR(255),
+  CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS DEVICES (
-    DEVICE_ID VARCHAR(255) PRIMARY KEY,
-    USER_ID INT REFERENCES USERS(USER_ID),
-    DEVICE_TYPE VARCHAR(50),
-    MODEL VARCHAR(100),
-    CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  DEVICE_ID VARCHAR(255) PRIMARY KEY,
+  USER_ID INT REFERENCES USERS(USER_ID),
+  DEVICE_TYPE VARCHAR(50),
+  MODEL VARCHAR(100),
+  CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS HEART_RATE (
-    ID SERIAL PRIMARY KEY,
-    USER_ID INT REFERENCES USERS(USER_ID),
-    DEVICE_ID VARCHAR(255) REFERENCES DEVICES(DEVICE_ID),
-    TIMESTAMP TIMESTAMP NOT NULL,
-    VALUE INT,
-    RESTING_HEART_RATE INT,
-    ZONES JSONB,
-    SUMMARY JSONB,
-    INTRADAY JSONB
+  ID SERIAL PRIMARY KEY,
+  USER_ID INT REFERENCES USERS(USER_ID),
+  DEVICE_ID VARCHAR(255) REFERENCES DEVICES(DEVICE_ID),
+  TIMESTAMP TIMESTAMP NOT NULL,
+  VALUE INT,
+  RESTING_HEART_RATE INT,
+  ZONE_FAT_BURN INT,
+  ZONE_CARDIO INT,
+  ZONE_PEAK INT,
+  SUMMARY_AVG INT,
+  SUMMARY_MAX INT,
+  INTRADAY_AVG INT,
+  INTRADAY_MAX INT
 );
 ```
-- Uses JSONB for nested/complex metric data.
+- All metric tables now use flat columns for each attribute, replacing previous JSONB fields. This structure enables faster queries, easier indexing, and more efficient storage.
+
+### E-R Diagram
+<img width="1534" height="744" alt="Image" src="https://github.com/user-attachments/assets/5a055a4d-8a89-417a-b638-d5d5a899c9d2" />
 
 ---
 
@@ -271,13 +280,13 @@ CREATE TABLE IF NOT EXISTS HEART_RATE (
 
 - **Python:** 
   
-  Mainly chosen over NodeJS for its data processing capabilities.
+  I chose Python over NodeJS for its robust data processing capabilities.
 - **TimescaleDB:** 
   
-  My initial choices were between TimescaleDB and InfluxDB. While InfluxDB is great for time-series data, TimescaleDB's SQL support and JSONB capabilities make it more suitable for complex queries and nested data structures.
-- **JSONB Storage:** 
+  I considered both TimescaleDB and InfluxDB. TimescaleDB's SQL support and ability to handle flat relational schemas made it the best fit for this pipeline, especially after moving away from JSONB.
+- **Flat Schema:** 
   
-  The metrics' synthetic data is quite nested and complex. Although I initially intended to use a flat structure, it was not feasible, especially given the large amount of data generated, which made management difficult on my local machine. JSONB allows flexible storage and querying, but it has drawbacks such as more complex and slower queries on nested data, as well as inefficiency in indexing. If this were a production system, I would have used a more structured approach with flat records.
+  I initially used JSONB for nested metric data, but switched to a flat schema to improve query speed and reduce memory usage. This approach is more scalable and aligns better with time-series database best practices.
 
 ---
 
@@ -293,15 +302,15 @@ Implement a new adapter class that knows how to read and parse data from the new
 # source_adapter.py
 
 class GarminAdapter(SourceAdapter):
-    def fetch_data(self, user_id, metric_type, since_timestamp):
-        # Custom logic to read Garmin data files or API
-        raw_data = self._read_garmin_files(user_id, metric_type, since_timestamp)
-        return raw_data
+  def fetch_data(self, user_id, metric_type, since_timestamp):
+    # Custom logic to read Garmin data files or API
+    raw_data = self._read_garmin_files(user_id, metric_type, since_timestamp)
+    return raw_data
 
-    def _read_garmin_files(self, user_id, metric_type, since_timestamp):
-        # Example: parse Garmin CSV/JSON files
-        # Return standardized dict/list
-        pass
+  def _read_garmin_files(self, user_id, metric_type, since_timestamp):
+    # Example: parse Garmin CSV/JSON files
+    # Return standardized dict/list
+    pass
 ```
 
 Register the adapter in the factory:
@@ -310,11 +319,11 @@ Register the adapter in the factory:
 # fix_source_adapter.py
 
 def get_adapter(source_type):
-    if source_type == "fitbit":
-        return FitbitAdapter()
-    elif source_type == "garmin":
-        return GarminAdapter()
-    # Add more adapters as needed
+  if source_type == "fitbit":
+    return FitbitAdapter()
+  elif source_type == "garmin":
+    return GarminAdapter()
+  # Add more adapters as needed
 ```
 
 ### 2. Extend Metric Models
@@ -325,10 +334,10 @@ If the new watch provides unique metrics, add corresponding model classes:
 # models.py
 
 class GarminHeartRate(MetricBase):
-    def __init__(self, user_id, device_id, timestamp, value, stress_level):
-        super().__init__(user_id, device_id, timestamp)
-        self.value = value
-        self.stress_level = stress_level
+  def __init__(self, user_id, device_id, timestamp, value, stress_level):
+    super().__init__(user_id, device_id, timestamp)
+    self.value = value
+    self.stress_level = stress_level
 ```
 
 ### 3. Update Configuration
@@ -345,13 +354,19 @@ Extend `schema.sql` for new metrics or device types:
 
 ```sql
 CREATE TABLE IF NOT EXISTS GARMIN_HEART_RATE (
-    ID SERIAL PRIMARY KEY,
-    USER_ID INT REFERENCES USERS(USER_ID),
-    DEVICE_ID VARCHAR(255) REFERENCES DEVICES(DEVICE_ID),
-    TIMESTAMP TIMESTAMP NOT NULL,
-    VALUE INT,
-    STRESS_LEVEL INT
+  ID SERIAL PRIMARY KEY,
+  USER_ID INT REFERENCES USERS(USER_ID),
+  DEVICE_ID VARCHAR(255) REFERENCES DEVICES(DEVICE_ID),
+  TIMESTAMP TIMESTAMP NOT NULL,
+  VALUE INT,
+  STRESS_LEVEL INT
 );
 ```
 
+## Limitations
+- While running the docker compose as TEST or CATCH UP Mode, every time you run it, it will not start from the last timestamp but from the beginning of the data and create duplicates. I found this issue at the last stage and will get back to it later.
+
+- Due to memory constraints, I was able to ingest only about 10-15 days of data. For larger datasets, you may need to optimize the pipeline or use a machine with more resources.
+
+- The normal mode works fine and will not create duplicates.
 
