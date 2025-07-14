@@ -4,6 +4,8 @@
 
 This project implements a daily, delta-load pipeline for ingesting Fitbit health metrics into a local TimescaleDB instance. It supports batch and incremental loads, automates ingestion via cron, and uses Docker for portability and reproducibility.
 
+Mentionable, the pipeline is designed to work with synthetic data files generated in Task 0b, simulating Fitbit health metrics for two users. The pipeline can be extended to support additional devices and metrics in the future.
+
 ---
 
 ## Directory Structure
@@ -64,7 +66,7 @@ wearipedia-project-assesment/
 
 1. Clone the repository:
    ```sh
-   git clone [repository-url]
+   git clone https://github.com/shadabtanjeed/wearipedia-project-assesment
    cd wearipedia-project-assesment
    ```
 2. Ensure data files are in `Data/Modified Data`.
@@ -267,10 +269,15 @@ CREATE TABLE IF NOT EXISTS HEART_RATE (
 
 ## Design Choices
 
-- **Python:** Chosen for data processing, PostgreSQL integration, readability, and ecosystem.
-- **TimescaleDB:** SQL interface, relational features, ACID compliance, PostgreSQL compatibility.
-- **JSONB Storage:** Flexible, future-proof, efficient for nested health metrics.
-- **Synthetic Data:** No API dependency, reproducible, controlled testing, easy future API integration.
+- **Python:** 
+  
+  Mainly chosen over NodeJS for its data processing capabilities.
+- **TimescaleDB:** 
+  
+  My initial choices were between TimescaleDB and InfluxDB. While InfluxDB is great for time-series data, TimescaleDB's SQL support and JSONB capabilities make it more suitable for complex queries and nested data structures.
+- **JSONB Storage:** 
+  
+  The metrics' synthetic data is quite nested and complex. Although I initially intended to use a flat structure, it was not feasible, especially given the large amount of data generated, which made management difficult on my local machine. JSONB allows flexible storage and querying, but it has drawbacks such as more complex and slower queries on nested data, as well as inefficiency in indexing. If this were a production system, I would have used a more structured approach with flat records.
 
 ---
 
@@ -347,18 +354,4 @@ CREATE TABLE IF NOT EXISTS GARMIN_HEART_RATE (
 );
 ```
 
-### Summary
-
-- Implement a new adapter for the watch data format.
-- Extend metric models for new metrics.
-- Register the adapter in the factory.
-- Update configuration and schema as needed.
-
-This modular approach allows seamless integration of new devices with minimal changes to the core pipeline.
-
----
-
-## Support
-
-For issues or questions, open a GitHub issue or contact the development team.
 
