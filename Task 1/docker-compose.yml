@@ -16,6 +16,11 @@ services:
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
     networks:
       - wearipedia-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   ingestion:
     build:
@@ -28,17 +33,25 @@ services:
       - DB_NAME=fitbit_data
       - DB_USER=postgres
       - DB_PASSWORD=password
+      # Set TEST_MODE to "true" to run in test mode
+      - TEST_MODE=${TEST_MODE:-false}
+      # Set CATCH_UP_MODE to "true" to run in catch-up mode
+      - CATCH_UP_MODE=${CATCH_UP_MODE:-false}
+      # Set RESET_MODE to "true" to run in reset mode
+      - RESET_MODE=${RESET_MODE:-false}
+      # Add this environment variable to fix the data path
+      - DATA_DIR=/app/Data/Modified\ Data
     volumes:
       - .:/app
-      - ./state:/app/state  # Changed from ingestion_state to state
+      - ../Data:/app/Data  # Changed to mount from parent directory
     depends_on:
-      - timescaledb
+      timescaledb:
+        condition: service_healthy
     networks:
       - wearipedia-net
 
 volumes:
   timescaledb_data:
-  # Remove the reference to ingestion_state volume as it's not needed
 
 networks:
   wearipedia-net:

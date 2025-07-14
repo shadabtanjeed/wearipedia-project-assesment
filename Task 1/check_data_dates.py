@@ -4,18 +4,13 @@ from datetime import datetime
 
 
 def extract_date_from_record(record, filename):
-    """Extract date from record based on file type and structure."""
 
-    # Activity files have dateTime at root level
     if "activity" in filename:
         return record.get("dateTime", "N/A")
 
-    # SpO2 files have dateTime at root level
     elif "spo2" in filename:
         return record.get("dateTime", "N/A")
 
-    # Heart rate files have nested structure
-    # Heart rate files have nested structure
     elif "hr" in filename and not "hrv" in filename:
         if "heart_rate_day" in record:
             heart_data = record["heart_rate_day"]
@@ -26,7 +21,6 @@ def extract_date_from_record(record, filename):
         return "N/A"
 
     elif "hrv" in filename:
-        # Add detailed debugging
         print(f"    DEBUG HRV: Keys in record: {list(record.keys())}")
         if "hrv" in record:
             hrv_array = record["hrv"]
@@ -61,14 +55,11 @@ def extract_date_from_record(record, filename):
                                     print(
                                         f"    DEBUG HRV: Found timestamp: {timestamp}"
                                     )
-                                    return timestamp.split("T")[
-                                        0
-                                    ]  # Extract date portion
+                                    return timestamp.split("T")[0]
 
         print("    DEBUG HRV: Failed to extract date")
         return "N/A"
 
-    # Breathing rate files have nested structure
     elif "br" in filename:
         if "br" in record:
             br_data = record["br"]
@@ -76,7 +67,6 @@ def extract_date_from_record(record, filename):
                 return br_data[0].get("dateTime", "N/A")
         return "N/A"
 
-    # Active Zone Minutes files have nested structure
     elif "azm" in filename:
         if "activities-active-zone-minutes-intraday" in record:
             azm_data = record["activities-active-zone-minutes-intraday"]
@@ -84,7 +74,6 @@ def extract_date_from_record(record, filename):
                 return azm_data[0].get("dateTime", "N/A")
         return "N/A"
 
-    # Fallback
     return record.get("dateTime", "N/A")
 
 
@@ -107,14 +96,12 @@ def check_data_dates():
                     data = json.load(f)
 
                 if data:
-                    # Get first and last records to see date range
                     first_record = data[0]
                     last_record = data[-1]
 
                     print(f"\n{filename}:")
                     print(f"  Total records: {len(data)}")
 
-                    # Debug first record structure for HRV
                     if "hrv" in filename:
                         print(f"  DEBUG: First record type: {type(first_record)}")
                         print(
@@ -127,15 +114,11 @@ def check_data_dates():
                     print(f"  First record date: {first_date}")
                     print(f"  Last record date: {last_date}")
 
-                    # Show a few sample dates
                     print("  Sample dates:")
-                    for i, record in enumerate(
-                        data[:3]
-                    ):  # Reduced to 3 for less verbose output
+                    for i, record in enumerate(data[:3]):
                         date = extract_date_from_record(record, filename)
                         print(f"    {i+1}: {date}")
 
-                    # Also show the user_id for each file
                     user_id = first_record.get("user_id", "N/A")
                     print(f"  User ID: {user_id}")
 

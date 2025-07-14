@@ -8,11 +8,11 @@ from datetime import datetime
 logger = logging.getLogger("DBOperations")
 
 
+# Database operations class for interacting with TimescaleDB
 class DBOperations:
-    """Database operations class for interacting with TimescaleDB"""
 
     def __init__(self, host: str, port: int, database: str, user: str, password: str):
-        """Initialize database connection parameters"""
+        # Initialize database connection parameters
         self.host = host
         self.port = port
         self.database = database
@@ -21,8 +21,9 @@ class DBOperations:
         self.conn = None
         self.cursor = None
 
+    # Connect to the database
     def connect(self) -> bool:
-        """Connect to the database"""
+
         try:
             self.conn = psycopg2.connect(
                 host=self.host,

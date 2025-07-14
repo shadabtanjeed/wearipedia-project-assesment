@@ -1,7 +1,8 @@
 import os
 import logging
 import argparse
-from datetime import datetime, timedelta
+import sys  # Added import for system functions
+from datetime import datetime, timedelta, timezone  # Added timezone import
 import time
 import json
 from typing import Dict, List, Optional
@@ -50,6 +51,38 @@ TEST_MODE = os.environ.get("TEST_MODE", "false").lower() == "true"
 TEST_INTERVAL = int(os.environ.get("TEST_INTERVAL", "300"))  # 5 minutes in seconds
 
 
+# Add this function after your existing imports
+def initialize_database(db_conn):
+    """Initialize database schema if tables don't exist"""
+    logger.info("Checking and initializing database schema if needed")
+
+    # Path to schema.sql - adjust if needed
+    schema_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
+
+    if not os.path.exists(schema_path):
+        logger.error(f"Schema file not found at {schema_path}")
+        return False
+
+    try:
+        # Read the schema SQL
+        with open(schema_path, "r") as f:
+            schema_sql = f.read()
+
+        # Execute the SQL script
+        with db_conn.conn.cursor() as cursor:
+            cursor.execute(schema_sql)
+        db_conn.conn.commit()
+        logger.info("Successfully initialized database schema")
+        return True
+    except Exception as e:
+        logger.error(f"Error initializing database schema: {e}")
+        import traceback
+
+        logger.error(traceback.format_exc())
+        db_conn.conn.rollback()
+        return False
+
+
 # Add debugging function
 def debug_data(msg, data, truncate=True):
     """Log data for debugging purposes with option to truncate for readability"""
@@ -76,7 +109,14 @@ def read_last_timestamp(metric_type: str, user_id: str = "1") -> Optional[dateti
             with open(timestamp_file, "r") as f:
                 timestamp_str = f.read().strip()
                 if timestamp_str:
-                    file_timestamp = datetime.fromisoformat(timestamp_str)
+                    # Convert to offset-aware datetime if timezone info is present
+                    if "+" in timestamp_str or "Z" in timestamp_str:
+                        file_timestamp = datetime.fromisoformat(
+                            timestamp_str.replace("Z", "+00:00")
+                        )
+                    else:
+                        # Create timezone-naive datetime
+                        file_timestamp = datetime.fromisoformat(timestamp_str)
                     logger.info(
                         f"Read timestamp from file {timestamp_file}: {file_timestamp}"
                     )
@@ -92,11 +132,20 @@ def read_last_timestamp(metric_type: str, user_id: str = "1") -> Optional[dateti
                 logger.info(
                     f"Read timestamp from database for {metric_type}: {db_timestamp}"
                 )
+                # Make db_timestamp timezone-naive if it's timezone-aware for consistent comparison
+                if db_timestamp.tzinfo is not None:
+                    db_timestamp = db_timestamp.replace(tzinfo=None)
 
             # Use the later timestamp if both exist
             if file_timestamp and db_timestamp:
+                # Make file_timestamp timezone-naive if it's timezone-aware
+                if file_timestamp.tzinfo is not None:
+                    file_timestamp = file_timestamp.replace(tzinfo=None)
                 return max(file_timestamp, db_timestamp)
             elif file_timestamp:
+                # Make file_timestamp timezone-naive if it's timezone-aware
+                if file_timestamp.tzinfo is not None:
+                    file_timestamp = file_timestamp.replace(tzinfo=None)
                 return file_timestamp
             elif db_timestamp:
                 return db_timestamp
@@ -117,6 +166,10 @@ def read_last_timestamp(metric_type: str, user_id: str = "1") -> Optional[dateti
 
 def write_timestamp(metric_type: str, timestamp: datetime, user_id: str = "1"):
     """Write the last processed timestamp for a specific metric type to file and database."""
+    # Ensure timestamp is timezone-naive for consistent storage
+    if timestamp.tzinfo is not None:
+        timestamp = timestamp.replace(tzinfo=None)
+
     # Write to file
     timestamp_file = f"last_timestamp_{metric_type}_user_{user_id}.txt"
     try:
@@ -345,6 +398,24 @@ def main():
     parser.add_argument(
         "--check-files", action="store_true", help="Check and fix file mappings"
     )
+
+    # Add new arguments for docker operation modes
+    parser.add_argument(
+        "--test-mode",
+        action="store_true",
+        help="Run in test mode, fetching data every 2 minutes",
+    )
+    parser.add_argument(
+        "--catch-up",
+        action="store_true",
+        help="Import all data from last timestamp to 2024-01-30",
+    )
+    parser.add_argument(
+        "--reset-all",
+        action="store_true",
+        help="Clear all stored data and start fresh from 2024-01-01",
+    )
+
     args = parser.parse_args()
 
     if args.debug:
@@ -371,8 +442,56 @@ def main():
         logger.error("Failed to connect to database. Exiting.")
         return
 
-    # Reset timestamps if requested
-    if args.reset_timestamps:
+    # Initialize database schema if needed
+    if not initialize_database(db):
+        logger.warning("Database schema initialization had issues, but continuing...")
+
+    # Handle reset-all mode - this should run first if specified
+    if args.reset_all:
+        logger.info("Resetting all data to start from 2024-01-01")
+
+        # Reset timestamps
+        import glob
+
+        for timestamp_file in glob.glob("last_timestamp_*"):
+            try:
+                os.remove(timestamp_file)
+                logger.info(f"Removed timestamp file: {timestamp_file}")
+            except Exception as e:
+                logger.error(f"Failed to remove timestamp file {timestamp_file}: {e}")
+
+        # Reset database timestamps and clear tables
+        try:
+            # First reset timestamps
+            from fix_source_adapter import reset_db_timestamps
+
+            reset_db_timestamps()
+
+            # Then truncate data tables
+            with db.conn.cursor() as cursor:
+                tables = [
+                    "HEART_RATE",
+                    "SPO2",
+                    "HRV",
+                    "BREATHING_RATE",
+                    "ACTIVE_ZONE_MINUTES",
+                    "ACTIVITY",
+                ]
+                for table in tables:
+                    cursor.execute(f"TRUNCATE TABLE {table} CASCADE;")
+                db.conn.commit()
+                logger.info("Successfully cleared all data tables")
+        except Exception as e:
+            logger.error(f"Failed to reset database: {e}")
+            db.conn.rollback()
+
+        # After reset, continue with normal processing or exit
+        if not args.test_mode and not args.catch_up:
+            logger.info("Reset complete. Exiting.")
+            return
+
+    # Reset timestamps if requested (and not already done by reset-all)
+    elif args.reset_timestamps:
         logger.info("Resetting all timestamp files")
         import glob
 
@@ -424,59 +543,163 @@ def main():
     logger.info(f"Processing data for users: {user_ids}")
     logger.info(f"Processing metric types: {metric_types}")
 
+    # Check data availability for users and metrics
+    available_data = {}
+    for user_id in user_ids:
+        available_data[user_id] = []
+        for metric_type in metric_types:
+            if adapter.check_data_availability(metric_type, user_id):
+                available_data[user_id].append(metric_type)
+            else:
+                logger.warning(
+                    f"No data file available for user {user_id}, metric type {metric_type}"
+                )
+
+    logger.info(f"Processing data for users with available data: {available_data}")
+
     try:
-        available_data = {}
-        for user_id in user_ids:
-            available_data[user_id] = []
-            for metric_type in metric_types:
-                if adapter.check_data_availability(metric_type, user_id):
-                    available_data[user_id].append(metric_type)
+        # Handle test mode - process one day at a time with 2 minute intervals
+        if args.test_mode:
+            logger.info("Running in test mode - fetching data every 2 minutes")
+
+            # Start from January 1, 2024
+            current_date = datetime(2024, 1, 1)
+            end_date = datetime(2024, 1, 30)  # Process up to January 30
+
+            while current_date <= end_date:
+                logger.info(
+                    f"-- Test run for date: {current_date.strftime('%Y-%m-%d')} --"
+                )
+
+                for user_id in user_ids:
+                    if not available_data[user_id]:
+                        continue
+
+                    for metric_type in available_data[user_id]:
+                        logger.info(
+                            f"Processing {metric_type} for User {user_id} on {current_date.date()}"
+                        )
+
+                        # Process metrics for the current date
+                        process_metrics(
+                            adapter,
+                            metric_factory,
+                            db,
+                            metric_type,
+                            current_date,
+                            current_date,
+                            user_id,
+                        )
+
+                        # Update timestamp for next run
+                        next_day = current_date + timedelta(days=1)
+                        write_timestamp(metric_type, next_day, user_id)
+
+                # Move to the next day
+                current_date += timedelta(days=1)
+
+                if current_date <= end_date:
+                    logger.info(
+                        f"Test run complete. Sleeping for 2 minutes before processing {current_date.date()}..."
+                    )
+                    time.sleep(120)  # Sleep for 2 minutes
                 else:
-                    logger.warning(
-                        f"No data file available for user {user_id}, metric type {metric_type}"
+                    logger.info("Test mode complete - reached end date")
+
+            # Exit after test mode completes - no need to continue to regular processing
+            logger.info("Test mode finished, exiting...")
+            return
+
+        # Handle catch-up mode - process all data up to Jan 30, 2024
+        elif args.catch_up:
+            logger.info("Running in catch-up mode - importing data up to 2024-01-30")
+            end_date = datetime(2024, 1, 30)
+
+            for user_id in user_ids:
+                if not available_data[user_id]:
+                    continue
+
+                logger.info(f"==== Catching up data for User {user_id} ====")
+
+                for metric_type in available_data[user_id]:
+                    # Get the last processed date
+                    start_date = read_last_timestamp(metric_type, user_id)
+
+                    # If the start date is already past the end date, skip
+                    if start_date >= end_date:
+                        logger.info(
+                            f"Skipping {metric_type} for user {user_id} - already up to date"
+                        )
+                        continue
+
+                    logger.info(
+                        f"Catching up {metric_type} for user {user_id} from {start_date} to {end_date}"
                     )
 
-        logger.info(f"Processing data for users with available data: {available_data}")
+                    # Process data for the entire range
+                    process_metrics(
+                        adapter,
+                        metric_factory,
+                        db,
+                        metric_type,
+                        start_date,
+                        end_date,
+                        user_id,
+                    )
 
-        # Process each user and metric type
-        for user_id in user_ids:
-            if not available_data[user_id]:
-                logger.info(f"Skipping User {user_id} - no data files available")
-                continue
+                    # Update timestamp to the day after end_date
+                    next_day = end_date + timedelta(days=1)
+                    write_timestamp(metric_type, next_day, user_id)
+                    logger.info(f"Updated timestamp to {next_day.date()} for next run")
+                    logger.info(
+                        f"Completed catching up {metric_type} data for user {user_id}"
+                    )
 
-            logger.info(f"==== Processing data for User {user_id} ====")
+            logger.info("Catch-up mode complete.")
+            # Exit after catch-up mode completes - no need to continue to regular processing
+            logger.info("Catch-up mode finished, exiting...")
+            return
 
-            for metric_type in available_data[user_id]:
-                logger.info(f"-- Processing {metric_type} for User {user_id} --")
+        # Normal processing mode - process one day at a time
+        else:
+            # Process each user and metric type
+            for user_id in user_ids:
+                if not available_data[user_id]:
+                    logger.info(f"Skipping User {user_id} - no data files available")
+                    continue
 
-                last_run = read_last_timestamp(metric_type, user_id)
+                logger.info(f"==== Processing data for User {user_id} ====")
 
-                # Always process only one day at a time for better control
-                # Process only the next day from last_run
-                target_date = last_run
-                logger.info(
-                    f"Processing {metric_type} data for {target_date.date()} for user {user_id}"
-                )
+                for metric_type in available_data[user_id]:
+                    logger.info(f"-- Processing {metric_type} for User {user_id} --")
 
-                # Process single day
-                process_metrics(
-                    adapter,
-                    metric_factory,
-                    db,
-                    metric_type,
-                    target_date,
-                    target_date,
-                    user_id,
-                )
+                    last_run = read_last_timestamp(metric_type, user_id)
 
-                # Update timestamp to next day
-                next_day = target_date + timedelta(days=1)
-                write_timestamp(metric_type, next_day, user_id)
-                logger.info(f"Updated timestamp to {next_day.date()} for next run")
+                    # Process only the next day from last_run
+                    target_date = last_run
+                    logger.info(
+                        f"Processing {metric_type} data for {target_date.date()} for user {user_id}"
+                    )
 
-                logger.info(
-                    f"Completed processing {metric_type} data for user {user_id}"
-                )
+                    # Process single day
+                    process_metrics(
+                        adapter,
+                        metric_factory,
+                        db,
+                        metric_type,
+                        target_date,
+                        target_date,
+                        user_id,
+                    )
+
+                    # Update timestamp to next day
+                    next_day = target_date + timedelta(days=1)
+                    write_timestamp(metric_type, next_day, user_id)
+                    logger.info(f"Updated timestamp to {next_day.date()} for next run")
+
+                    logger.info(
+                        f"Completed processing {metric_type} data for user {user_id}"
+                    )
 
     except KeyboardInterrupt:
         logger.info("Ingestion interrupted by user")
