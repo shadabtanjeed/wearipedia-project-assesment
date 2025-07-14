@@ -29,13 +29,13 @@ services:
       - DB_NAME=fitbit_data
       - DB_USER=postgres
       - DB_PASSWORD=password
-      - TEST_MODE=${TEST_MODE:-false}
+      - TEST_MODE=${TEST_MODE:-true}  # Set to true for debugging
       - TEST_INTERVAL=${TEST_INTERVAL:-300}
+      - DATA_DIR=/app/Data/Modified Data  # Explicitly set the data directory
     volumes:
       - ../Data:/app/Data
       - ingestion_state:/app/state
       - ./logs:/var/log
-
-volumes:
-  timescale_data:
-  ingestion_state:
+    # Add this for debugging
+    stdin_open: true
+    tty: true

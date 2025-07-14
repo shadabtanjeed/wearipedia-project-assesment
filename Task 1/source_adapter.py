@@ -28,9 +28,8 @@ class SourceAdapter(ABC):
         pass
 
 
-# Adapter for synthetic Fitbit data stored as JSON files.
 class SyntheticFitbitAdapter(SourceAdapter):
-    # Mapping of metric types to file name patterns
+    # Mapping of metric types to file name patterns - updated to match actual files
     METRIC_FILE_MAPPING = {
         "heart_rate": "hr_user{}_modified.json",
         "activity": "activity_user{}_modified.json",
@@ -117,6 +116,25 @@ class SyntheticFitbitAdapter(SourceAdapter):
             logger.warning(f"Invalid date format: {date_str}")
             return False
 
+    def check_data_availability(
+        self, metric_type: str, user_id: Optional[str] = None
+    ) -> bool:
+        """Check if data file exists for a specific metric type and user."""
+        if metric_type not in self.METRIC_FILE_MAPPING:
+            return False
+
+        # if user_id is not provided, default to "1"
+        user = user_id if user_id else "1"
+
+        file_name = self.METRIC_FILE_MAPPING[metric_type].format(user)
+        file_path = os.path.join(self.data_dir, file_name)
+
+        exists = os.path.exists(file_path)
+        if not exists:
+            logger.info(f"Data file does not exist: {file_path}")
+
+        return exists
+
 
 # Factory for creating source adapters based on device type.
 class SourceAdapterFactory:
@@ -125,8 +143,17 @@ class SourceAdapterFactory:
         device_type = device_type.lower()
 
         if device_type == "fitbit" or device_type == "synthetic":
-            # For now, we're using the synthetic data adapter
-            data_dir = kwargs.get("data_dir", os.path.join("Data", "Modified Data"))
+            # Use an absolute path to the data directory
+            # Get the directory where source_adapter.py is located
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            # Go to parent directory and then to Data/Modified Data
+            parent_dir = os.path.dirname(current_dir)
+            data_dir = kwargs.get(
+                "data_dir", os.path.join(parent_dir, "Data", "Modified Data")
+            )
+
+            # Log the actual path being used
+            logger.info(f"Using data directory: {data_dir}")
             return SyntheticFitbitAdapter(data_dir)
         else:
             raise ValueError(f"Unsupported device type: {device_type}")
