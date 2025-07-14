@@ -6,7 +6,7 @@ This project implements a daily, delta-load pipeline for ingesting Fitbit health
 
 The pipeline is designed to work with synthetic data files generated in Task 0b, simulating Fitbit health metrics for two users. 
 
-Due to memory limitations on my local machine, I was able to ingest approximately 10-15 days worth of data. The ingestion process is technically sound, but handling larger volumes would require more resources or further optimization.
+Due to memory limitations on my local machine, I was able to ingest approximately 15 days worth of data. The ingestion process is technically sound, but handling larger volumes would require more resources or further optimization.
 
 ---
 
@@ -366,7 +366,7 @@ CREATE TABLE IF NOT EXISTS GARMIN_HEART_RATE (
 ## Limitations
 - While running the docker compose as TEST or CATCH UP Mode, every time you run it, it will not start from the last timestamp but from the beginning of the data and create duplicates. I found this issue at the last stage and will get back to it later.
 
-- Due to memory constraints, I was able to ingest only about 10-15 days of data. For larger datasets, you may need to optimize the pipeline or use a machine with more resources.
+- Due to memory constraints, I was able to ingest only around 15 days of data. For larger datasets, you may need to optimize the pipeline or use a machine with more resources.
 
 - The normal mode works fine and will not create duplicates.
 
