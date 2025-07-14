@@ -27,9 +27,8 @@ RUN crontab /etc/cron.d/ingestion-cron
 # Create state directory for timestamp storage
 RUN mkdir -p /app/state
 
-# Create entrypoint script
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Make entrypoint script executable
+RUN chmod +x /app/entrypoint.sh
 
 # Start with entrypoint
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/app/entrypoint.sh"]
