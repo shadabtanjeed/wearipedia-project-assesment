@@ -1,8 +1,8 @@
 import os
 import logging
 import argparse
-import sys  # Added import for system functions
-from datetime import datetime, timedelta, timezone  # Added timezone import
+import sys
+from datetime import datetime, timedelta, timezone
 import time
 import json
 from typing import Dict, List, Optional
@@ -13,11 +13,11 @@ from db_operations import DBOperations
 
 # Configure more detailed logging
 logging.basicConfig(
-    level=logging.DEBUG,  # Changed from INFO to DEBUG for more detailed logs
+    level=logging.DEBUG,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("ingestion_debug.log"),  # Log to file
-        logging.StreamHandler(),  # And to console
+        logging.FileHandler("ingestion_debug.log"),
+        logging.StreamHandler(),
     ],
 )
 logger = logging.getLogger("Ingest")
@@ -51,7 +51,6 @@ TEST_MODE = os.environ.get("TEST_MODE", "false").lower() == "true"
 TEST_INTERVAL = int(os.environ.get("TEST_INTERVAL", "300"))  # 5 minutes in seconds
 
 
-# Add this function after your existing imports
 def initialize_database(db_conn):
     """Initialize database schema if tables don't exist"""
     logger.info("Checking and initializing database schema if needed")
@@ -199,7 +198,7 @@ def process_metrics(
     end_date: datetime,
     user_id: str = "1",
 ):
-    """Process metrics for a specific type and date range, ensuring data is ordered."""
+    """Process metrics for a specific type and date range, using flat records."""
     logger.info(
         f"Processing {metric_type} metrics from {start_date} to {end_date} for user {user_id}"
     )
@@ -216,156 +215,159 @@ def process_metrics(
         )
         return
 
-    # Sort raw data by timestamp to ensure correct ordering
-    def get_timestamp(data_point):
-        if isinstance(data_point, dict) and "dateTime" in data_point:
-            dt_str = data_point["dateTime"]
-            # Add time component if missing to ensure consistent datetime parsing
-            if "T" not in dt_str and len(dt_str) <= 10:
-                dt_str += "T00:00:00"
-            return datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
-        elif isinstance(data_point, dict) and "timestamp" in data_point:
-            return data_point["timestamp"]
-        logger.warning(f"Cannot determine timestamp for data point: {data_point}")
-        return datetime.now()
+    # Process data and create flattened records
+    total_records = 0
+    device_id = f"fitbit-device-{user_id}"
 
-    sorted_raw_data = sorted(raw_data, key=get_timestamp)
-    logger.debug(f"Sorted {len(sorted_raw_data)} data points")
+    # Ensure user and device exist in database
+    db.ensure_users_and_devices(int(user_id), device_id)
 
-    metrics_to_insert = []
-
-    # Map source adapter metric types to database/factory metric types
+    # Map metric types to internal factory types
     metric_type_mapping = {
-        "heart_rate": "hr",
+        "heart_rate": "heart_rate",
         "spo2": "spo2",
         "hrv": "hrv",
-        "breathing_rate": "br",
-        "active_zone_minutes": "azm",
+        "breathing_rate": "breathing_rate",
+        "active_zone_minutes": "active_zone_minutes",
         "activity": "activity",
     }
 
     factory_metric_type = metric_type_mapping.get(metric_type, metric_type)
-    logger.debug(f"Mapped {metric_type} to factory type {factory_metric_type}")
 
-    for idx, data_point in enumerate(sorted_raw_data):
-        try:
-            # Debug every 10th item to avoid log flooding
-            if idx % 10 == 0:
-                debug_data(f"Processing data point {idx}", data_point)
+    try:
+        # Process each data point based on metric type
+        if metric_type == "heart_rate":
+            # Heart rate data has a different structure
+            for item in raw_data:
+                heart_day = item.get("heart_rate_day", [])
+                for day_data in heart_day:
+                    try:
+                        metric = metric_factory.create_metric(
+                            factory_metric_type, int(user_id), device_id
+                        )
+                        metric.set_data(day_data)
 
-            # Create metric using factory with mapped type
-            metric = metric_factory.create_metric(factory_metric_type, data_point)
+                        # Get flattened records for this day
+                        flat_records = metric.get_flat_records()
+                        if flat_records:
+                            inserted = db.insert_records(flat_records)
+                            total_records += inserted
+                            logger.debug(
+                                f"Inserted {inserted} flattened records for heart rate"
+                            )
+                    except Exception as e:
+                        logger.error(f"Error processing heart rate data: {e}")
+                        import traceback
 
-            # Ensure user and device exist in database
-            db.ensure_user_exists(metric.user_id)
+                        logger.error(traceback.format_exc())
 
-            if metric.device_id:
-                device_parts = metric.device_id.split("-")
-                device_type = device_parts[0] if len(device_parts) > 0 else "unknown"
-                model = device_parts[1] if len(device_parts) > 1 else "unknown"
-                db.ensure_device_exists(
-                    device_id=metric.device_id,
-                    user_id=metric.user_id,
-                    device_type=device_type,
-                    model=model,
-                )
+        elif metric_type == "active_zone_minutes":
+            # AZM data has a different structure
+            for item in raw_data:
+                azm_list = item.get("activities-active-zone-minutes-intraday", [])
+                for azm_data in azm_list:
+                    try:
+                        metric = metric_factory.create_metric(
+                            factory_metric_type, int(user_id), device_id
+                        )
+                        metric.set_data(azm_data)
 
-            # Prepare metric data for insertion based on type
-            metric_data = {
-                "user_id": metric.user_id,
-                "device_id": metric.device_id,
-                "timestamp": metric.timestamp,
-            }
+                        # Get flattened records
+                        flat_records = metric.get_flat_records()
+                        if flat_records:
+                            inserted = db.insert_records(flat_records)
+                            total_records += inserted
+                            logger.debug(
+                                f"Inserted {inserted} flattened records for AZM"
+                            )
+                    except Exception as e:
+                        logger.error(f"Error processing AZM data: {e}")
+                        import traceback
 
-            # Add metric-specific fields using factory metric type
-            if factory_metric_type == "hr":
-                metric_data.update(
-                    {
-                        "value": getattr(metric, "value", 0),
-                        "resting_heart_rate": getattr(
-                            metric, "resting_heart_rate", None
-                        ),
-                        "zones": getattr(metric, "zones", None),
-                        "summary": getattr(metric, "summary", None),
-                        "intraday": getattr(metric, "intraday", None),
-                    }
-                )
-            elif factory_metric_type == "spo2":
-                metric_data.update(
-                    {
-                        "value": getattr(metric, "value", 0),
-                        "minute_data": getattr(metric, "minute_data", None),
-                    }
-                )
-            elif factory_metric_type == "hrv":
-                metric_data.update(
-                    {
-                        "rmssd": getattr(metric, "rmssd", None),
-                        "coverage": getattr(metric, "coverage", None),
-                        "hf": getattr(metric, "hf", None),
-                        "lf": getattr(metric, "lf", None),
-                        "minute_data": getattr(metric, "minute_data", None),
-                    }
-                )
-            elif factory_metric_type == "br":
-                metric_data.update(
-                    {
-                        "deep_sleep_rate": getattr(metric, "deep_sleep_rate", None),
-                        "rem_sleep_rate": getattr(metric, "rem_sleep_rate", None),
-                        "light_sleep_rate": getattr(metric, "light_sleep_rate", None),
-                        "full_sleep_rate": getattr(metric, "full_sleep_rate", None),
-                    }
-                )
-            elif factory_metric_type == "azm":
-                metric_data.update(
-                    {
-                        "fat_burn_minutes": getattr(metric, "fat_burn_minutes", None),
-                        "cardio_minutes": getattr(metric, "cardio_minutes", None),
-                        "peak_minutes": getattr(metric, "peak_minutes", None),
-                        "active_zone_minutes": getattr(
-                            metric, "active_zone_minutes", None
-                        ),
-                        "minute_data": getattr(metric, "minute_data", None),
-                    }
-                )
-            elif factory_metric_type == "activity":
-                metric_data.update({"value": getattr(metric, "value", 0)})
+                        logger.error(traceback.format_exc())
 
-            metrics_to_insert.append(metric_data)
+        elif metric_type == "breathing_rate":
+            # Breathing rate data structure
+            for item in raw_data:
+                br_list = item.get("br", [])
+                for br_data in br_list:
+                    try:
+                        metric = metric_factory.create_metric(
+                            factory_metric_type, int(user_id), device_id
+                        )
+                        metric.set_data(br_data)
 
-            # Debug every 50th processed item
-            if idx % 50 == 0 and idx > 0:
-                logger.debug(f"Processed {idx} items for {metric_type}")
+                        # Get flattened records
+                        flat_records = metric.get_flat_records()
+                        if flat_records:
+                            inserted = db.insert_records(flat_records)
+                            total_records += inserted
+                            logger.debug(
+                                f"Inserted {inserted} flattened records for breathing rate"
+                            )
+                    except Exception as e:
+                        logger.error(f"Error processing breathing rate data: {e}")
+                        import traceback
 
-        except Exception as e:
-            logger.error(
-                f"Error processing {factory_metric_type} data point at index {idx}: {e}"
-            )
-            logger.error(f"Problematic data point: {json.dumps(data_point)}")
-            import traceback
+                        logger.error(traceback.format_exc())
 
-            logger.error(traceback.format_exc())
-            continue
+        elif metric_type == "hrv":
+            # HRV data structure
+            for item in raw_data:
+                hrv_list = item.get("hrv", [])
+                for hrv_data in hrv_list:
+                    try:
+                        metric = metric_factory.create_metric(
+                            factory_metric_type, int(user_id), device_id
+                        )
+                        metric.set_data(hrv_data)
 
-    # Insert metrics into appropriate table using factory metric type
-    if metrics_to_insert:
+                        # Get flattened records
+                        flat_records = metric.get_flat_records()
+                        if flat_records:
+                            inserted = db.insert_records(flat_records)
+                            total_records += inserted
+                            logger.debug(
+                                f"Inserted {inserted} flattened records for HRV"
+                            )
+                    except Exception as e:
+                        logger.error(f"Error processing HRV data: {e}")
+                        import traceback
+
+                        logger.error(traceback.format_exc())
+
+        elif metric_type in ["spo2", "activity"]:
+            # SpO2 and Activity have similar structure
+            for item in raw_data:
+                try:
+                    metric = metric_factory.create_metric(
+                        factory_metric_type, int(user_id), device_id
+                    )
+                    metric.set_data(item)
+
+                    # Get flattened records
+                    flat_records = metric.get_flat_records()
+                    if flat_records:
+                        inserted = db.insert_records(flat_records)
+                        total_records += inserted
+                        logger.debug(
+                            f"Inserted {inserted} flattened records for {metric_type}"
+                        )
+                except Exception as e:
+                    logger.error(f"Error processing {metric_type} data: {e}")
+                    import traceback
+
+                    logger.error(traceback.format_exc())
+
         logger.info(
-            f"Attempting to insert {len(metrics_to_insert)} {factory_metric_type} metrics"
+            f"Successfully processed {total_records} flattened records for {metric_type}"
         )
-        try:
-            db.insert_metrics(factory_metric_type, metrics_to_insert)
-            logger.info(
-                f"Successfully processed {len(metrics_to_insert)} {factory_metric_type} data points for user {user_id}"
-            )
-        except Exception as e:
-            logger.error(f"Failed to insert {factory_metric_type} metrics: {e}")
-            import traceback
 
-            logger.error(traceback.format_exc())
-    else:
-        logger.warning(
-            f"No valid {factory_metric_type} data points to insert for user {user_id}"
-        )
+    except Exception as e:
+        logger.error(f"Error during {metric_type} processing: {e}")
+        import traceback
+
+        logger.error(traceback.format_exc())
 
 
 def main():
@@ -471,6 +473,7 @@ def main():
             with db.conn.cursor() as cursor:
                 tables = [
                     "HEART_RATE",
+                    "HEART_RATE_ZONES",
                     "SPO2",
                     "HRV",
                     "BREATHING_RATE",

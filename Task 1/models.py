@@ -1,481 +1,328 @@
+import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
-import logging
-import json
 
 logger = logging.getLogger("Models")
 
 
-class BaseHealthMetric:
-    """Base class for health metrics"""
-
-    def __init__(self, timestamp: datetime, user_id: int = 1, device_id: str = None):
-        self.timestamp = timestamp
+class HealthMetric:
+    def __init__(self, metric_type: str, user_id: int, device_id: Optional[str] = None):
+        self.metric_type = metric_type
         self.user_id = user_id
-        self.device_id = device_id or f"fitbit-charge6-{user_id}"  # Default device ID
+        self.device_id = device_id
+        self.timestamp = None
 
-    def __repr__(self):
-        return f"{self.__class__.__name__}(timestamp={self.timestamp}, user_id={self.user_id})"
+    def set_timestamp(self, timestamp):
+        self.timestamp = timestamp
 
-
-class HeartRateMetric(BaseHealthMetric):
-    """Heart rate metric model"""
-
-    def __init__(
-        self,
-        timestamp: datetime,
-        user_id: int = 1,
-        device_id: str = None,
-        value: int = 0,
-        resting_heart_rate: Optional[int] = None,
-        zones: Optional[Dict] = None,
-        summary: Optional[Dict] = None,
-        intraday: Optional[Dict] = None,
-    ):
-        super().__init__(timestamp, user_id, device_id)
-        self.value = value
-        self.resting_heart_rate = resting_heart_rate
-        self.zones = zones
-        self.summary = summary
-        self.intraday = intraday
+    def get_flat_records(self):
+        """Return list of flattened records for database insertion"""
+        raise NotImplementedError("Subclasses must implement get_flat_records")
 
 
-class SpO2Metric(BaseHealthMetric):
-    """SpO2 (oxygen saturation) metric model"""
+class HeartRateMetric(HealthMetric):
+    def __init__(self, user_id, device_id=None):
+        super().__init__("heart_rate", user_id, device_id)
+        self.value = None
+        self.resting_heart_rate = None
+        self.zones = []
+        self.intraday = []
+        self.date = None
 
-    def __init__(
-        self,
-        timestamp: datetime,
-        user_id: int = 1,
-        device_id: str = None,
-        value: float = 0,
-        minute_data: Optional[List[Dict]] = None,
-    ):
-        super().__init__(timestamp, user_id, device_id)
-        self.value = value
-        self.minute_data = minute_data
+    def set_data(self, data):
+        if "activities-heart" in data:
+            heart_data = data["activities-heart"][0]
+            self.date = heart_data["dateTime"]
+            self.timestamp = datetime.fromisoformat(self.date)
+
+            if "value" in heart_data and isinstance(heart_data["value"], dict):
+                if "restingHeartRate" in heart_data["value"]:
+                    self.resting_heart_rate = heart_data["value"]["restingHeartRate"]
+
+                if "heartRateZones" in heart_data["value"]:
+                    self.zones = heart_data["value"]["heartRateZones"]
+
+        if (
+            "activities-heart-intraday" in data
+            and "dataset" in data["activities-heart-intraday"]
+        ):
+            self.intraday = data["activities-heart-intraday"]["dataset"]
+
+    def get_flat_records(self):
+        """Return flattened records for database insertion"""
+        records = []
+
+        # Process heart rate intraday data
+        for entry in self.intraday:
+            try:
+                time_str = entry["time"]
+                value = entry["value"]
+
+                # Create timestamp by combining date and time
+                if self.date:
+                    timestamp = datetime.fromisoformat(f"{self.date}T{time_str}")
+
+                    records.append(
+                        {
+                            "table": "heart_rate",
+                            "user_id": self.user_id,
+                            "device_id": self.device_id,
+                            "timestamp": timestamp,
+                            "value": value,
+                            "resting_heart_rate": self.resting_heart_rate,
+                        }
+                    )
+            except (KeyError, ValueError) as e:
+                logger.error(f"Error processing heart rate intraday data: {e}")
+
+        # If no intraday data but we have a date, create at least one record
+        if not records and self.date:
+            records.append(
+                {
+                    "table": "heart_rate",
+                    "user_id": self.user_id,
+                    "device_id": self.device_id,
+                    "timestamp": self.timestamp,
+                    "value": None,
+                    "resting_heart_rate": self.resting_heart_rate,
+                }
+            )
+
+        # Process heart rate zones
+        for zone in self.zones:
+            try:
+                records.append(
+                    {
+                        "table": "heart_rate_zones",
+                        "user_id": self.user_id,
+                        "device_id": self.device_id,
+                        "timestamp": self.timestamp,
+                        "zone_name": zone.get("name"),
+                        "min_hr": zone.get("min"),
+                        "max_hr": zone.get("max"),
+                        "minutes": zone.get("minutes"),
+                        "calories_out": zone.get("caloriesOut"),
+                    }
+                )
+            except (KeyError, ValueError) as e:
+                logger.error(f"Error processing heart rate zone: {e}")
+
+        return records
 
 
-class HRVMetric(BaseHealthMetric):
-    """Heart Rate Variability metric model"""
+class SpO2Metric(HealthMetric):
+    def __init__(self, user_id, device_id=None):
+        super().__init__("spo2", user_id, device_id)
+        self.date = None
+        self.minutes = []
 
-    def __init__(
-        self,
-        timestamp: datetime,
-        user_id: int = 1,
-        device_id: str = None,
-        rmssd: Optional[float] = None,
-        coverage: Optional[float] = None,
-        hf: Optional[float] = None,
-        lf: Optional[float] = None,
-        minute_data: Optional[List[Dict]] = None,
-    ):
-        super().__init__(timestamp, user_id, device_id)
-        self.rmssd = rmssd
-        self.coverage = coverage
-        self.hf = hf  # High frequency power
-        self.lf = lf  # Low frequency power
-        self.minute_data = minute_data
+    def set_data(self, data):
+        if "dateTime" in data:
+            self.date = data["dateTime"]
+        if "minutes" in data:
+            self.minutes = data["minutes"]
 
+    def get_flat_records(self):
+        records = []
 
-class BreathingRateMetric(BaseHealthMetric):
-    """Breathing rate metric model"""
+        for minute_data in self.minutes:
+            try:
+                timestamp = datetime.fromisoformat(minute_data["minute"])
+                value = minute_data["value"]
 
-    def __init__(
-        self,
-        timestamp: datetime,
-        user_id: int = 1,
-        device_id: str = None,
-        deep_sleep_rate: Optional[float] = None,
-        rem_sleep_rate: Optional[float] = None,
-        light_sleep_rate: Optional[float] = None,
-        full_sleep_rate: Optional[float] = None,
-    ):
-        super().__init__(timestamp, user_id, device_id)
-        self.deep_sleep_rate = deep_sleep_rate
-        self.rem_sleep_rate = rem_sleep_rate
-        self.light_sleep_rate = light_sleep_rate
-        self.full_sleep_rate = full_sleep_rate
+                records.append(
+                    {
+                        "table": "spo2",
+                        "user_id": self.user_id,
+                        "device_id": self.device_id,
+                        "timestamp": timestamp,
+                        "value": value,
+                    }
+                )
+            except (KeyError, ValueError) as e:
+                logger.error(f"Error processing SpO2 minute data: {e}")
+
+        return records
 
 
-class ActiveZoneMinutesMetric(BaseHealthMetric):
-    """Active zone minutes metric model"""
+class HRVMetric(HealthMetric):
+    def __init__(self, user_id, device_id=None):
+        super().__init__("hrv", user_id, device_id)
+        self.minutes = []
 
-    def __init__(
-        self,
-        timestamp: datetime,
-        user_id: int = 1,
-        device_id: str = None,
-        fat_burn_minutes: int = 0,
-        cardio_minutes: int = 0,
-        peak_minutes: int = 0,
-        active_zone_minutes: int = 0,
-        minute_data: Optional[List[Dict]] = None,
-    ):
-        super().__init__(timestamp, user_id, device_id)
-        self.fat_burn_minutes = fat_burn_minutes
-        self.cardio_minutes = cardio_minutes
-        self.peak_minutes = peak_minutes
-        self.active_zone_minutes = active_zone_minutes
-        self.minute_data = minute_data
+    def set_data(self, data):
+        if "minutes" in data:
+            self.minutes = data["minutes"]
+
+    def get_flat_records(self):
+        records = []
+
+        for minute_data in self.minutes:
+            try:
+                timestamp = datetime.fromisoformat(minute_data["minute"])
+                value = minute_data.get("value", {})
+
+                records.append(
+                    {
+                        "table": "hrv",
+                        "user_id": self.user_id,
+                        "device_id": self.device_id,
+                        "timestamp": timestamp,
+                        "rmssd": value.get("rmssd"),
+                        "coverage": value.get("coverage"),
+                        "hf": value.get("hf"),
+                        "lf": value.get("lf"),
+                    }
+                )
+            except (KeyError, ValueError) as e:
+                logger.error(f"Error processing HRV minute data: {e}")
+
+        return records
 
 
-class ActivityMetric(BaseHealthMetric):
-    """Activity metric model (steps, distance, etc.)"""
+class BreathingRateMetric(HealthMetric):
+    def __init__(self, user_id, device_id=None):
+        super().__init__("breathing_rate", user_id, device_id)
+        self.date = None
+        self.deep_sleep_rate = None
+        self.rem_sleep_rate = None
+        self.light_sleep_rate = None
+        self.full_sleep_rate = None
 
-    def __init__(
-        self,
-        timestamp: datetime,
-        user_id: int = 1,
-        device_id: str = None,
-        value: int = 0,
-    ):
-        super().__init__(timestamp, user_id, device_id)
-        self.value = value
+    def set_data(self, data):
+        if "dateTime" in data:
+            self.date = data["dateTime"]
+            self.timestamp = datetime.fromisoformat(data["dateTime"])
+        if "value" in data:
+            value = data["value"]
+            if (
+                "deepSleepSummary" in value
+                and "breathingRate" in value["deepSleepSummary"]
+            ):
+                self.deep_sleep_rate = value["deepSleepSummary"]["breathingRate"]
+            if (
+                "remSleepSummary" in value
+                and "breathingRate" in value["remSleepSummary"]
+            ):
+                self.rem_sleep_rate = value["remSleepSummary"]["breathingRate"]
+            if (
+                "lightSleepSummary" in value
+                and "breathingRate" in value["lightSleepSummary"]
+            ):
+                self.light_sleep_rate = value["lightSleepSummary"]["breathingRate"]
+            if (
+                "fullSleepSummary" in value
+                and "breathingRate" in value["fullSleepSummary"]
+            ):
+                self.full_sleep_rate = value["fullSleepSummary"]["breathingRate"]
+
+    def get_flat_records(self):
+        return (
+            [
+                {
+                    "table": "breathing_rate",
+                    "user_id": self.user_id,
+                    "device_id": self.device_id,
+                    "timestamp": self.timestamp,
+                    "deep_sleep_rate": self.deep_sleep_rate,
+                    "rem_sleep_rate": self.rem_sleep_rate,
+                    "light_sleep_rate": self.light_sleep_rate,
+                    "full_sleep_rate": self.full_sleep_rate,
+                }
+            ]
+            if self.timestamp
+            else []
+        )
+
+
+class ActiveZoneMinutesMetric(HealthMetric):
+    def __init__(self, user_id, device_id=None):
+        super().__init__("active_zone_minutes", user_id, device_id)
+        self.date = None
+        self.minutes = []
+
+    def set_data(self, data):
+        if "dateTime" in data:
+            self.date = data["dateTime"]
+        if "minutes" in data:
+            self.minutes = data["minutes"]
+
+    def get_flat_records(self):
+        records = []
+
+        for minute_data in self.minutes:
+            try:
+                minute_str = minute_data["minute"]
+                # Handle different time formats
+                if "T" in minute_str:
+                    timestamp = datetime.fromisoformat(minute_str)
+                else:
+                    # Assuming format like "08:30:00" with date from self.date
+                    timestamp = datetime.fromisoformat(f"{self.date}T{minute_str}")
+
+                value = minute_data.get("value", {})
+
+                records.append(
+                    {
+                        "table": "active_zone_minutes",
+                        "user_id": self.user_id,
+                        "device_id": self.device_id,
+                        "timestamp": timestamp,
+                        "fat_burn_minutes": value.get("fatBurnActiveZoneMinutes", 0),
+                        "cardio_minutes": value.get("cardioActiveZoneMinutes", 0),
+                        "peak_minutes": value.get("peakActiveZoneMinutes", 0),
+                        "active_zone_minutes": value.get("activeZoneMinutes", 0),
+                    }
+                )
+            except (KeyError, ValueError) as e:
+                logger.error(f"Error processing AZM minute data: {e}")
+
+        return records
+
+
+class ActivityMetric(HealthMetric):
+    def __init__(self, user_id, device_id=None):
+        super().__init__("activity", user_id, device_id)
+        self.date = None
+        self.value = None
+
+    def set_data(self, data):
+        if "dateTime" in data:
+            self.date = data["dateTime"]
+            self.timestamp = datetime.fromisoformat(data["dateTime"])
+        if "value" in data:
+            self.value = data["value"]
+
+    def get_flat_records(self):
+        return (
+            [
+                {
+                    "table": "activity",
+                    "user_id": self.user_id,
+                    "device_id": self.device_id,
+                    "timestamp": self.timestamp,
+                    "value": self.value,
+                }
+            ]
+            if self.timestamp
+            else []
+        )
 
 
 class HealthMetricFactory:
-    """Factory for creating health metrics from raw data"""
-
-    def create_metric(self, metric_type: str, data: Dict) -> BaseHealthMetric:
-        """Create and return a health metric of the specified type from raw data"""
-        # Parse user ID - default to 1 if not present
-        user_id = int(data.get("user_id", 1))
-
-        # Parse device ID - use None for default
-        device_id = data.get("device_id")
-
-        # Parse timestamp
-        timestamp = self._extract_timestamp(metric_type, data)
-
-        # Create appropriate metric object based on type
-        if metric_type == "hr":
-            # Parse heart rate-specific fields
-            heart_data = {}
-            intraday_data = {}
-
-            if "heart_rate_day" in data and data["heart_rate_day"]:
-                heart_day = data["heart_rate_day"][0]
-
-                # Get activities-heart data
-                if "activities-heart" in heart_day and heart_day["activities-heart"]:
-                    activities_heart = heart_day["activities-heart"][0]
-                    heart_data = activities_heart.get("value", {})
-
-                # Get intraday data
-                if "activities-heart-intraday" in heart_day:
-                    intraday_data = heart_day["activities-heart-intraday"]
-
-            value = 0
-            if (
-                intraday_data
-                and "dataset" in intraday_data
-                and intraday_data["dataset"]
-            ):
-                # Use the first datapoint value
-                value = intraday_data["dataset"][0].get("value", 0)
-
-            resting_hr = heart_data.get("restingHeartRate")
-
-            # Get zone information
-            zones = {}
-            if "heartRateZones" in heart_data:
-                zones = heart_data["heartRateZones"]
-
-            logger.debug(
-                f"Created heart rate metric with value: {value}, resting HR: {resting_hr}"
-            )
-
-            return HeartRateMetric(
-                timestamp=timestamp,
-                user_id=user_id,
-                device_id=device_id,
-                value=value,
-                resting_heart_rate=resting_hr,
-                zones=zones,
-                summary=heart_data,
-                intraday=intraday_data,
-            )
-
+    @staticmethod
+    def create_metric(metric_type: str, user_id: int, device_id: Optional[str] = None):
+        if metric_type == "heart_rate":
+            return HeartRateMetric(user_id, device_id)
         elif metric_type == "spo2":
-            value = 0
-            minute_data = []
-
-            # Direct dateTime and value for daily summary
-            value = data.get("value", 0)
-
-            # Get minute-level data if available
-            if "minutes" in data:
-                minute_data = data["minutes"]
-
-            logger.debug(f"Created SpO2 metric with value: {value}")
-
-            return SpO2Metric(
-                timestamp=timestamp,
-                user_id=user_id,
-                device_id=device_id,
-                value=value,
-                minute_data=minute_data,
-            )
-
+            return SpO2Metric(user_id, device_id)
         elif metric_type == "hrv":
-            hrv_data = None
-            minutes = []
-
-            # Get HRV specific data
-            if "hrv" in data and data["hrv"]:
-                hrv_data = data["hrv"][0]
-                minutes = hrv_data.get("minutes", [])
-
-            # Get first minute values as representative sample or use empty dict
-            first_minute = minutes[0] if minutes and len(minutes) > 0 else {}
-            first_value = (
-                first_minute.get("value", {}) if isinstance(first_minute, dict) else {}
-            )
-
-            rmssd = first_value.get("rmssd")
-            coverage = first_value.get("coverage")
-            hf = first_value.get("hf")
-            lf = first_value.get("lf")
-
-            logger.debug(
-                f"Created HRV metric with rmssd: {rmssd}, coverage: {coverage}"
-            )
-
-            return HRVMetric(
-                timestamp=timestamp,
-                user_id=user_id,
-                device_id=device_id,
-                rmssd=rmssd,
-                coverage=coverage,
-                hf=hf,
-                lf=lf,
-                minute_data=minutes,
-            )
-
-        elif metric_type == "br":
-            br_data = None
-
-            # Get breathing rate specific data
-            if "br" in data and data["br"]:
-                br_data = data["br"][0]
-
-            deep_rate = None
-            rem_rate = None
-            light_rate = None
-            full_rate = None
-
-            if br_data and "value" in br_data:
-                value_obj = br_data["value"]
-                deep_rate = value_obj.get("deepSleepSummary", {}).get("breathingRate")
-                rem_rate = value_obj.get("remSleepSummary", {}).get("breathingRate")
-                light_rate = value_obj.get("lightSleepSummary", {}).get("breathingRate")
-                full_rate = value_obj.get("fullSleepSummary", {}).get("breathingRate")
-
-            logger.debug(f"Created BR metric with full rate: {full_rate}")
-
-            return BreathingRateMetric(
-                timestamp=timestamp,
-                user_id=user_id,
-                device_id=device_id,
-                deep_sleep_rate=deep_rate,
-                rem_sleep_rate=rem_rate,
-                light_sleep_rate=light_rate,
-                full_sleep_rate=full_rate,
-            )
-
-        elif metric_type == "azm":
-            azm_data = None
-            minutes = []
-
-            # Get active zone minutes specific data
-            if "activities-active-zone-minutes-intraday" in data:
-                azm_array = data["activities-active-zone-minutes-intraday"]
-                if azm_array and len(azm_array) > 0:
-                    azm_data = azm_array[0]
-                    minutes = azm_data.get("minutes", [])
-
-            fat_burn = 0
-            cardio = 0
-            peak = 0
-            active = 0
-
-            # Calculate totals from minute data
-            for minute in minutes:
-                if "value" in minute:
-                    value_obj = minute["value"]
-                    fat_burn += value_obj.get("fatBurnActiveZoneMinutes", 0)
-                    cardio += value_obj.get("cardioActiveZoneMinutes", 0)
-                    peak += value_obj.get("peakActiveZoneMinutes", 0)
-                    active += value_obj.get("activeZoneMinutes", 0)
-
-            logger.debug(f"Created AZM metric with active minutes: {active}")
-
-            return ActiveZoneMinutesMetric(
-                timestamp=timestamp,
-                user_id=user_id,
-                device_id=device_id,
-                fat_burn_minutes=fat_burn,
-                cardio_minutes=cardio,
-                peak_minutes=peak,
-                active_zone_minutes=active,
-                minute_data=minutes,
-            )
-
+            return HRVMetric(user_id, device_id)
+        elif metric_type == "breathing_rate":
+            return BreathingRateMetric(user_id, device_id)
+        elif metric_type == "active_zone_minutes":
+            return ActiveZoneMinutesMetric(user_id, device_id)
         elif metric_type == "activity":
-            # Activity has a simpler structure
-            value = data.get("value", 0)
-
-            logger.debug(f"Created Activity metric with value: {value}")
-
-            return ActivityMetric(
-                timestamp=timestamp, user_id=user_id, device_id=device_id, value=value
-            )
-
+            return ActivityMetric(user_id, device_id)
         else:
             raise ValueError(f"Unknown metric type: {metric_type}")
-
-    def _extract_timestamp(self, metric_type: str, data: Dict) -> datetime:
-        """Extract timestamp from data based on metric type"""
-        now = datetime.now()
-
-        if metric_type == "activity":
-            # Activity has direct dateTime field
-            if "dateTime" in data:
-                date_str = data["dateTime"]
-                # Add time component if missing
-                if len(date_str) <= 10:
-                    date_str += "T00:00:00"
-                try:
-                    return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-                except:
-                    logger.warning(f"Could not parse timestamp: {date_str}")
-                    return now
-
-        elif metric_type == "hr":
-            # Heart rate has nested structure
-            if "heart_rate_day" in data and data["heart_rate_day"]:
-                heart_day = data["heart_rate_day"][0]
-                if "activities-heart" in heart_day and heart_day["activities-heart"]:
-                    date_str = heart_day["activities-heart"][0].get("dateTime")
-                    if date_str:
-                        # Add time component if missing
-                        if len(date_str) <= 10:
-                            date_str += "T00:00:00"
-                        try:
-                            return datetime.fromisoformat(
-                                date_str.replace("Z", "+00:00")
-                            )
-                        except:
-                            logger.warning(f"Could not parse timestamp: {date_str}")
-
-        elif metric_type == "spo2":
-            # SpO2 has direct dateTime field
-            if "dateTime" in data:
-                date_str = data["dateTime"]
-                # Add time component if missing
-                if len(date_str) <= 10:
-                    date_str += "T00:00:00"
-                try:
-                    return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-                except:
-                    logger.warning(f"Could not parse timestamp: {date_str}")
-
-            # Try to get from minutes if available
-            elif "minutes" in data and data["minutes"] and len(data["minutes"]) > 0:
-                minute_str = data["minutes"][0].get("minute", "")
-                if minute_str:
-                    try:
-                        return datetime.fromisoformat(minute_str.replace("Z", "+00:00"))
-                    except:
-                        logger.warning(
-                            f"Could not parse minute timestamp: {minute_str}"
-                        )
-
-        elif metric_type == "hrv":
-            # HRV has nested structure
-            if "hrv" in data and data["hrv"]:
-                hrv_data = data["hrv"][0]
-
-                # First try dateTime field directly
-                if "dateTime" in hrv_data:
-                    date_str = hrv_data["dateTime"]
-                    # Add time component if missing
-                    if len(date_str) <= 10:
-                        date_str += "T00:00:00"
-                    try:
-                        return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-                    except:
-                        logger.warning(f"Could not parse timestamp: {date_str}")
-
-                # Then try minutes
-                if (
-                    "minutes" in hrv_data
-                    and hrv_data["minutes"]
-                    and len(hrv_data["minutes"]) > 0
-                ):
-                    minute_str = hrv_data["minutes"][0].get("minute", "")
-                    if minute_str:
-                        try:
-                            return datetime.fromisoformat(
-                                minute_str.replace("Z", "+00:00")
-                            )
-                        except:
-                            logger.warning(
-                                f"Could not parse minute timestamp: {minute_str}"
-                            )
-
-        elif metric_type == "br":
-            # Breathing rate has nested structure
-            if "br" in data and data["br"]:
-                br_data = data["br"][0]
-                if "dateTime" in br_data:
-                    date_str = br_data["dateTime"]
-                    # Add time component if missing
-                    if len(date_str) <= 10:
-                        date_str += "T00:00:00"
-                    try:
-                        return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-                    except:
-                        logger.warning(f"Could not parse timestamp: {date_str}")
-
-        elif metric_type == "azm":
-            # Active zone minutes has nested structure
-            if "activities-active-zone-minutes-intraday" in data:
-                azm_array = data["activities-active-zone-minutes-intraday"]
-                if azm_array and len(azm_array) > 0:
-                    azm_data = azm_array[0]
-                    if "dateTime" in azm_data:
-                        date_str = azm_data["dateTime"]
-                        # Add time component if missing
-                        if len(date_str) <= 10:
-                            date_str += "T00:00:00"
-                        try:
-                            return datetime.fromisoformat(
-                                date_str.replace("Z", "+00:00")
-                            )
-                        except:
-                            logger.warning(f"Could not parse timestamp: {date_str}")
-
-                    # Try to get from minutes if available
-                    if (
-                        "minutes" in azm_data
-                        and azm_data["minutes"]
-                        and len(azm_data["minutes"]) > 0
-                    ):
-                        minute_str = azm_data["minutes"][0].get("minute", "")
-                        if minute_str:
-                            try:
-                                return datetime.fromisoformat(
-                                    minute_str.replace("Z", "+00:00")
-                                )
-                            except:
-                                logger.warning(
-                                    f"Could not parse minute timestamp: {minute_str}"
-                                )
-
-        # Default to current time if no timestamp found
-        logger.warning(
-            f"Could not extract timestamp for {metric_type}, using current time"
-        )
-        return now
