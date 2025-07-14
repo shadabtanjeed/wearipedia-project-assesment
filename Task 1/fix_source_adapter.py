@@ -1,7 +1,7 @@
 import os
 import json
 import logging
-import shutil
+from datetime import datetime
 
 logger = logging.getLogger("SourceAdapterFixer")
 logger.setLevel(logging.INFO)
@@ -13,25 +13,10 @@ logger.addHandler(handler)
 
 
 def fix_adapter_mapping():
-    """Create symbolic links or copies to ensure files are found with expected names"""
-    # Determine data directory
-    data_dir = None
-    if os.path.exists("/app/Data/Modified Data"):
-        data_dir = "/app/Data/Modified Data"
-    elif os.path.exists("../Data/Modified Data"):
-        data_dir = "../Data/Modified Data"
-    else:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_dir)
-        data_dir = os.path.join(project_root, "Data", "Modified Data")
+    """Create symbolic links to ensure files are found with expected names"""
+    data_dir = "../Data/Modified Data"
 
-    if not os.path.exists(data_dir):
-        logger.error(f"Data directory not found: {data_dir}")
-        return
-
-    logger.info(f"Using data directory: {data_dir}")
-
-    # Mapping of expected file names to actual file names
+    # Mapping of source adapter expected filenames to actual filenames
     file_mappings = {
         "heart_rate_user1_modified.json": "hr_user1_modified.json",
         "heart_rate_user2_modified.json": "hr_user2_modified.json",
@@ -47,70 +32,46 @@ def fix_adapter_mapping():
 
         if os.path.exists(actual_path) and not os.path.exists(expected_path):
             try:
-                # Try symbolic link first
-                try:
-                    os.symlink(actual_name, expected_path)
-                    logger.info(
-                        f"Created symbolic link: {expected_path} -> {actual_path}"
-                    )
-                except (OSError, NotImplementedError):
-                    # Fall back to copying if symlinks not supported
-                    shutil.copy2(actual_path, expected_path)
-                    logger.info(f"Copied file: {actual_path} -> {expected_path}")
+                # Create symbolic link
+                os.symlink(actual_name, expected_path)
+                logger.info(f"Created symbolic link: {expected_path} -> {actual_path}")
             except Exception as e:
-                logger.error(f"Error creating file mapping: {e}")
+                logger.error(f"Error creating symbolic link: {e}")
 
-                # Alternative: copy file content
+                # Alternative: copy file
                 try:
                     with open(actual_path, "r") as src_file:
                         data = json.load(src_file)
                     with open(expected_path, "w") as dst_file:
                         json.dump(data, dst_file)
-                    logger.info(f"Created JSON file: {expected_path}")
+                    logger.info(f"Copied file: {actual_path} -> {expected_path}")
                 except Exception as e2:
-                    logger.error(f"Error copying file content: {e2}")
-
-    # Reset timestamps in DB to use January 2024 start date
-    try:
-        reset_db_timestamps()
-        logger.info("Reset DB timestamps to January 2024")
-    except Exception as e:
-        logger.error(f"Failed to reset DB timestamps: {e}")
+                    logger.error(f"Error copying file: {e2}")
 
 
-def reset_db_timestamps():
-    """Reset all timestamps in the database to start from January 2024"""
-    import psycopg2
+def reset_timestamps():
+    """Reset timestamps to January 2024 for all metrics and users"""
     from datetime import datetime
-
-    # Get database parameters from environment or use defaults
-    db_host = os.environ.get("DB_HOST", "localhost")
-    db_port = int(os.environ.get("DB_PORT", "5432"))
-    db_name = os.environ.get("DB_NAME", "fitbit_data")
-    db_user = os.environ.get("DB_USER", "postgres")
-    db_password = os.environ.get("DB_PASSWORD", "password")
 
     start_date = datetime(2024, 1, 1)
 
-    conn = None
+    # Using InfluxDB operations to reset timestamps
     try:
-        conn = psycopg2.connect(
-            host=db_host,
-            port=db_port,
-            database=db_name,
-            user=db_user,
-            password=db_password,
-        )
-        cursor = conn.cursor()
+        from influx_operations import InfluxOperations
 
-        # Reset all existing timestamps
-        cursor.execute(
-            """
-            DELETE FROM LAST_PROCESSED_DATES
-        """
-        )
+        # Get environment variables
+        import os
 
-        # Insert new timestamps for common metric types
+        url = os.environ.get("INFLUXDB_URL", "http://localhost:8086")
+        token = os.environ.get("INFLUXDB_TOKEN", "my-super-secret-token")
+        org = os.environ.get("INFLUXDB_ORG", "fitbit")
+        bucket = os.environ.get("INFLUXDB_BUCKET", "fitbit_metrics")
+
+        db = InfluxOperations(url, token, org, bucket)
+        if not db.connect():
+            logger.error("Failed to connect to InfluxDB")
+            return
+
         metric_types = [
             "heart_rate",
             "spo2",
@@ -123,27 +84,20 @@ def reset_db_timestamps():
 
         for metric_type in metric_types:
             for user_id in user_ids:
-                cursor.execute(
-                    """
-                    INSERT INTO LAST_PROCESSED_DATES (METRIC_TYPE, USER_ID, LAST_PROCESSED_DATE)
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (METRIC_TYPE, USER_ID) DO UPDATE 
-                    SET LAST_PROCESSED_DATE = EXCLUDED.LAST_PROCESSED_DATE
-                """,
-                    (metric_type, user_id, start_date),
+                db.update_last_processed_date(metric_type, user_id, start_date)
+                logger.info(
+                    f"Reset timestamp for {metric_type}, user {user_id} to {start_date}"
                 )
 
-        conn.commit()
-        logger.info("Successfully reset all timestamps in database")
+        db.close()
+        logger.info("Successfully reset all timestamps")
     except Exception as e:
-        logger.error(f"Database operation error: {e}")
-        if conn:
-            conn.rollback()
-    finally:
-        if conn:
-            conn.close()
+        logger.error(f"Error resetting timestamps: {e}")
+        import traceback
+
+        logger.error(traceback.format_exc())
 
 
 if __name__ == "__main__":
     fix_adapter_mapping()
-    print("Done fixing source adapter mapping")
+    reset_timestamps()

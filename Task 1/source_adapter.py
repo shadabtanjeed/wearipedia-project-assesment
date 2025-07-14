@@ -37,24 +37,29 @@ class SyntheticFitbitAdapter(SourceAdapter):
         )
 
     def get_file_path(self, metric_type: str, user_id: str) -> str:
-        """Get the file path for a specific metric type and user."""
+        """Get the file path for a specific metric type and user with explicit handling for naming conflicts."""
         # Map metric types to file name prefixes
         type_to_prefix = {
-            "heart_rate": "hr",  # Allow both heart_rate and hr
-            "hr": "hr",
-            "spo2": "spo2",
-            "hrv": "hrv",
-            "breathing_rate": "br",
-            "br": "br",
-            "active_zone_minutes": "azm",
-            "azm": "azm",
-            "activity": "activity",
+            "heart_rate": "hr",  # heart_rate -> hr in filenames
+            "hr": "hr",  # hr is an alias for heart_rate
+            "spo2": "spo2",  # spo2 keeps its name
+            "hrv": "hrv",  # hrv keeps its name (important!)
+            "breathing_rate": "br",  # breathing_rate -> br in filenames
+            "br": "br",  # br is an alias for breathing_rate
+            "active_zone_minutes": "azm",  # active_zone_minutes -> azm in filenames
+            "azm": "azm",  # azm is an alias for active_zone_minutes
+            "activity": "activity",  # activity keeps its name
         }
 
+        # Get prefix based on metric_type
         prefix = type_to_prefix.get(metric_type, metric_type)
+
+        # Construct file path
         file_name = f"{prefix}_user{user_id}_modified.json"
         file_path = os.path.join(self.data_dir, file_name)
 
+        # For debugging
+        logger.debug(f"File path for {metric_type} (user {user_id}): {file_path}")
         return file_path
 
     def check_data_availability(self, metric_type: str, user_id: str) -> bool:
@@ -83,9 +88,8 @@ class SyntheticFitbitAdapter(SourceAdapter):
             with open(file_path, "r") as f:
                 all_data = json.load(f)
 
-            # Filter data based on date if needed
+            # Filter data by date range if possible
             if start_date and end_date:
-                # For different metrics, date filtering will be handled differently
                 filtered_data = self._filter_data_by_date(
                     metric_type, all_data, start_date, end_date
                 )

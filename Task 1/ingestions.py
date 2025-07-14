@@ -4,11 +4,12 @@ import argparse
 from datetime import datetime, timedelta
 import time
 import json
+import subprocess
 from typing import Dict, List, Optional
 
 from source_adapter import SourceAdapterFactory
 from models import HealthMetricFactory
-from db_operations import DBOperations
+from influx_operations import InfluxOperations
 
 # Configure more detailed logging
 logging.basicConfig(
@@ -22,11 +23,17 @@ logging.basicConfig(
 logger = logging.getLogger("Ingest")
 
 # Environment variables with defaults for both Docker and local execution
-DB_HOST = os.environ.get("DB_HOST", "localhost")
-DB_PORT = int(os.environ.get("DB_PORT", "5432"))
-DB_NAME = os.environ.get("DB_NAME", "fitbit_data")
-DB_USER = os.environ.get("DB_USER", "postgres")
-DB_PASSWORD = os.environ.get("DB_PASSWORD", "password")
+INFLUXDB_URL = os.environ.get("INFLUXDB_URL", "http://localhost:8086")
+INFLUXDB_TOKEN = os.environ.get("INFLUXDB_TOKEN", "my-super-secret-token")
+INFLUXDB_ORG = os.environ.get("INFLUXDB_ORG", "fitbit")
+INFLUXDB_BUCKET = os.environ.get("INFLUXDB_BUCKET", "fitbit_metrics")
+
+# New environment variables for execution mode
+CONTINUOUS_MODE = os.environ.get("CONTINUOUS_MODE", "false").lower() == "true"
+CONTINUOUS_INTERVAL = int(
+    os.environ.get("CONTINUOUS_INTERVAL", "120")
+)  # 2 minutes in seconds
+DAILY_EXECUTION_HOUR = int(os.environ.get("DAILY_EXECUTION_HOUR", "13"))  # 1 PM
 
 # Fix data directory resolution
 if os.path.exists("/app/Data/Modified Data"):
@@ -47,7 +54,9 @@ print(f"Using data directory: {DATA_DIR}")
 
 TIMESTAMP_FILE = os.environ.get("TIMESTAMP_FILE", "last_run_timestamp.txt")
 TEST_MODE = os.environ.get("TEST_MODE", "false").lower() == "true"
-TEST_INTERVAL = int(os.environ.get("TEST_INTERVAL", "300"))  # 5 minutes in seconds
+TEST_INTERVAL = int(
+    os.environ.get("TEST_INTERVAL", "120")
+)  # Changed to 2 minutes in seconds
 
 
 # Add debugging function
@@ -83,8 +92,8 @@ def read_last_timestamp(metric_type: str, user_id: str = "1") -> Optional[dateti
         except Exception as e:
             logger.error(f"Error reading timestamp from file: {e}")
 
-    # Also check the database
-    db = DBOperations(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD)
+    # Also check InfluxDB
+    db = InfluxOperations(INFLUXDB_URL, INFLUXDB_TOKEN, INFLUXDB_ORG, INFLUXDB_BUCKET)
     try:
         if db.connect():
             db_timestamp = db.get_last_processed_date(metric_type, int(user_id))
@@ -127,7 +136,7 @@ def write_timestamp(metric_type: str, timestamp: datetime, user_id: str = "1"):
         logger.error(f"Error writing timestamp to file: {e}")
 
     # Write to database
-    db = DBOperations(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD)
+    db = InfluxOperations(INFLUXDB_URL, INFLUXDB_TOKEN, INFLUXDB_ORG, INFLUXDB_BUCKET)
     try:
         if db.connect():
             db.update_last_processed_date(metric_type, int(user_id), timestamp)
@@ -294,7 +303,7 @@ def process_metrics(
             logger.error(traceback.format_exc())
             continue
 
-    # Insert metrics into appropriate table using factory metric type
+    # Insert metrics into appropriate measurement using factory metric type
     if metrics_to_insert:
         logger.info(
             f"Attempting to insert {len(metrics_to_insert)} {factory_metric_type} metrics"
@@ -313,6 +322,76 @@ def process_metrics(
         logger.warning(
             f"No valid {factory_metric_type} data points to insert for user {user_id}"
         )
+
+
+def monitor_influxdb():
+    """Print monitoring information for the InfluxDB database"""
+    logger.info("Monitoring InfluxDB database...")
+
+    db = InfluxOperations(INFLUXDB_URL, INFLUXDB_TOKEN, INFLUXDB_ORG, INFLUXDB_BUCKET)
+
+    try:
+        if db.connect():
+            # Get bucket stats
+            query = f"""
+            from(bucket: "{INFLUXDB_BUCKET}")
+                |> range(start: -30d)
+                |> count()
+                |> group(columns: ["_measurement"])
+                |> sum()
+            """
+
+            query_api = db.client.query_api()
+            tables = query_api.query(query, org=INFLUXDB_ORG)
+
+            logger.info("InfluxDB Database Stats:")
+
+            metrics_count = {}
+            for table in tables:
+                for record in table.records:
+                    measurement = record.get_measurement()
+                    count = record.get_value()
+                    metrics_count[measurement] = count
+
+            for metric, count in metrics_count.items():
+                logger.info(f"  - {metric}: {count} data points")
+
+            # Get total storage info
+            logger.info(f"Bucket: {INFLUXDB_BUCKET}")
+            logger.info(f"Organization: {INFLUXDB_ORG}")
+
+            return metrics_count
+    except Exception as e:
+        logger.error(f"Error monitoring InfluxDB: {e}")
+    finally:
+        db.close()
+
+    return None
+
+
+def process_date_range(
+    adapter, metric_factory, db, metric_type, start_date, end_date, user_id
+):
+    """Process metrics for a date range, one day at a time"""
+    current_date = start_date
+
+    while current_date <= end_date:
+        logger.info(f"Processing date: {current_date.date()}")
+        process_metrics(
+            adapter,
+            metric_factory,
+            db,
+            metric_type,
+            current_date,
+            current_date,
+            user_id,
+        )
+
+        # Move to next day
+        current_date += timedelta(days=1)
+
+        # Update timestamp to indicate we've processed this day
+        write_timestamp(metric_type, current_date, user_id)
 
 
 def main():
@@ -345,11 +424,25 @@ def main():
     parser.add_argument(
         "--check-files", action="store_true", help="Check and fix file mappings"
     )
+    parser.add_argument(
+        "--continuous", action="store_true", help="Run continuously every 2 minutes"
+    )
+    parser.add_argument(
+        "--batch",
+        action="store_true",
+        help="Process full batch from Jan 1 to Jan 31, 2024",
+    )
+    parser.add_argument("--monitor", action="store_true", help="Monitor InfluxDB stats")
     args = parser.parse_args()
 
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
         logger.debug("Debug mode enabled")
+
+    # If only monitoring was requested, do that and exit
+    if args.monitor:
+        stats = monitor_influxdb()
+        return
 
     # Check and fix file mappings if requested
     if args.check_files:
@@ -364,11 +457,13 @@ def main():
     # Initialize components
     adapter = SourceAdapterFactory.create_adapter("synthetic", data_dir=DATA_DIR)
     metric_factory = HealthMetricFactory()
-    db = DBOperations(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD)
+
+    # Use InfluxDB operations instead of PostgreSQL
+    db = InfluxOperations(INFLUXDB_URL, INFLUXDB_TOKEN, INFLUXDB_ORG, INFLUXDB_BUCKET)
 
     # Connect to database
     if not db.connect():
-        logger.error("Failed to connect to database. Exiting.")
+        logger.error("Failed to connect to InfluxDB. Exiting.")
         return
 
     # Reset timestamps if requested
@@ -385,9 +480,9 @@ def main():
 
         # Also reset database timestamps
         try:
-            from fix_source_adapter import reset_db_timestamps
+            from fix_source_adapter import reset_timestamps
 
-            reset_db_timestamps()
+            reset_timestamps()
             logger.info("Reset database timestamps")
         except Exception as e:
             logger.error(f"Failed to reset database timestamps: {e}")
@@ -424,6 +519,9 @@ def main():
     logger.info(f"Processing data for users: {user_ids}")
     logger.info(f"Processing metric types: {metric_types}")
 
+    # Use continuous mode from args or environment variable
+    continuous_mode = args.continuous or CONTINUOUS_MODE
+
     try:
         available_data = {}
         for user_id in user_ids:
@@ -438,45 +536,98 @@ def main():
 
         logger.info(f"Processing data for users with available data: {available_data}")
 
-        # Process each user and metric type
-        for user_id in user_ids:
-            if not available_data[user_id]:
-                logger.info(f"Skipping User {user_id} - no data files available")
-                continue
+        # Batch processing mode - process all data from Jan 1 to Jan 31, 2024
+        if args.batch:
+            batch_start_date = datetime(2024, 1, 1)
+            batch_end_date = datetime(2024, 1, 31)
 
-            logger.info(f"==== Processing data for User {user_id} ====")
+            logger.info(
+                f"Batch processing from {batch_start_date.date()} to {batch_end_date.date()}"
+            )
 
-            for metric_type in available_data[user_id]:
-                logger.info(f"-- Processing {metric_type} for User {user_id} --")
+            for user_id in user_ids:
+                if not available_data[user_id]:
+                    logger.info(f"Skipping User {user_id} - no data files available")
+                    continue
 
-                last_run = read_last_timestamp(metric_type, user_id)
+                logger.info(f"==== Processing data for User {user_id} ====")
 
-                # Always process only one day at a time for better control
-                # Process only the next day from last_run
-                target_date = last_run
-                logger.info(
-                    f"Processing {metric_type} data for {target_date.date()} for user {user_id}"
-                )
+                for metric_type in available_data[user_id]:
+                    logger.info(
+                        f"-- Batch processing {metric_type} for User {user_id} --"
+                    )
 
-                # Process single day
-                process_metrics(
-                    adapter,
-                    metric_factory,
-                    db,
-                    metric_type,
-                    target_date,
-                    target_date,
-                    user_id,
-                )
+                    # Process all dates in the range
+                    process_date_range(
+                        adapter,
+                        metric_factory,
+                        db,
+                        metric_type,
+                        batch_start_date,
+                        batch_end_date,
+                        user_id,
+                    )
 
-                # Update timestamp to next day
-                next_day = target_date + timedelta(days=1)
-                write_timestamp(metric_type, next_day, user_id)
-                logger.info(f"Updated timestamp to {next_day.date()} for next run")
+            logger.info("Batch processing complete")
+            return
 
-                logger.info(
-                    f"Completed processing {metric_type} data for user {user_id}"
-                )
+        # Single execution or continuous loop
+        while True:
+            run_time = datetime.now()
+            logger.info(f"Starting data processing at {run_time}")
+
+            # Process each user and metric type
+            for user_id in user_ids:
+                if not available_data[user_id]:
+                    logger.info(f"Skipping User {user_id} - no data files available")
+                    continue
+
+                logger.info(f"==== Processing data for User {user_id} ====")
+
+                for metric_type in available_data[user_id]:
+                    logger.info(f"-- Processing {metric_type} for User {user_id} --")
+
+                    last_run = read_last_timestamp(metric_type, user_id)
+
+                    # Process only the day from last_run
+                    target_date = last_run
+                    logger.info(
+                        f"Processing {metric_type} data for {target_date.date()} for user {user_id}"
+                    )
+
+                    # Process single day
+                    process_metrics(
+                        adapter,
+                        metric_factory,
+                        db,
+                        metric_type,
+                        target_date,
+                        target_date,
+                        user_id,
+                    )
+
+                    # Update timestamp to next day
+                    next_day = target_date + timedelta(days=1)
+                    write_timestamp(metric_type, next_day, user_id)
+                    logger.info(f"Updated timestamp to {next_day.date()} for next run")
+
+                    logger.info(
+                        f"Completed processing {metric_type} data for user {user_id}"
+                    )
+
+            # After processing all metrics and users
+            logger.info("All processing complete for this run")
+
+            # Show database stats after processing
+            monitor_influxdb()
+
+            # Exit if not in continuous mode
+            if not continuous_mode:
+                break
+
+            # Sleep for the interval before running again
+            logger.info(f"Waiting {CONTINUOUS_INTERVAL} seconds before next run...")
+            time.sleep(CONTINUOUS_INTERVAL)
 
     except KeyboardInterrupt:
         logger.info("Ingestion interrupted by user")
