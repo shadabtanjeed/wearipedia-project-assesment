@@ -3,3 +3,22 @@ Data/Raw Data/complete_user1_raw.json
 Data/Raw Data/complete_user2_raw.json
 Data/Raw Data/hr_user1_raw.json
 Data/Raw Data/hr_user2_raw.json
+Task 1/ingestion_debug.log
+*.pyc
+Task 1/last_timestamp_active_zone_minutes_user_1.txt
+Task 1/last_timestamp_active_zone_minutes_user_2.txt
+Task 1/last_timestamp_activity_user_1.txt
+Task 1/last_timestamp_activity_user_2.txt
+Task 1/last_timestamp_breathing_rate_user_1.txt
+Task 1/last_timestamp_breathing_rate_user_2.txt
+Task 1/last_timestamp_heart_rate_user_1.txt
+Task 1/last_timestamp_heart_rate_user_2.txt
+Task 1/last_timestamp_hrv_user_1.txt
+Task 1/last_timestamp_hrv_user_2.txt
+Task 1/last_timestamp_spo2_user_1.txt
+Task 1/last_timestamp_spo2_user_2.txt
+Task 1/ingestion_debug.log
+*.pyc
+Task 1/last_timestamp_spo2_user_1.txt
+Task 1/ingestion_debug.log
+Task 1/last_timestamp_spo2_user_1.txt

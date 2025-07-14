@@ -1,0 +1,442 @@
+Heart Rate Json Format:
+
+[
+    {"heart_rate_day": 
+        [
+            {
+            "activities-heart": [
+                {
+                "dateTime": "2019-05-08",
+                "value": {
+                    "customHeartRateZones": [
+                    {
+                        "caloriesOut": 1164.09312,
+                        "max": 90,
+                        "min": 30,
+                        "minutes": 718,
+                        "name": "Below"
+                    },
+                    {
+                        "caloriesOut": 203.65344,
+                        "max": 110,
+                        "min": 90,
+                        "minutes": 74,
+                        "name": "Custom Zone"
+                    },
+                    {
+                        "caloriesOut": 330.76224,
+                        "max": 220,
+                        "min": 110,
+                        "minutes": 42,
+                        "name": "Above"
+                    }
+                    ],
+                    "heartRateZones": [
+                    {
+                        "caloriesOut": 979.43616,
+                        "max": 86,
+                        "min": 30,
+                        "minutes": 626,
+                        "name": "Out of Range"
+                    },
+                    {
+                        "caloriesOut": 514.16208,
+                        "max": 121,
+                        "min": 86,
+                        "minutes": 185,
+                        "name": "Fat Burn"
+                    },
+                    {
+                        "caloriesOut": 197.92656,
+                        "max": 147,
+                        "min": 121,
+                        "minutes": 18,
+                        "name": "Cardio"
+                    },
+                    {
+                        "caloriesOut": 6.984,
+                        "max": 220,
+                        "min": 147,
+                        "minutes": 5,
+                        "name": "Peak"
+                    }
+                    ],
+                    "restingHeartRate": 76
+                }
+                }
+            ],
+            "activities-heart-intraday": {
+                "dataset": [
+                {
+                    "time": "00:00:00",
+                    "value": 78
+                },
+                {
+                    "time": "00:01:00",
+                    "value": 78
+                },
+                {
+                    "time": "00:02:00",
+                    "value": 77
+                },
+                {
+                    "time": "00:03:00",
+                    "value": 77
+                },
+                {
+                    "time": "00:04:00",
+                    "value": 77
+                },
+                ....
+                ],
+                "datasetInterval": 1,
+                "datasetType": "second"
+            }
+            }
+        ]
+        "user_id": 1
+    },
+    ....
+]
+
+Activity Json Format:
+
+
+[
+    {
+        "dateTime": "2024-01-01",
+        "value": 3450,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-02",
+        "value": 4980,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-03",
+        "value": 6595,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-04",
+        "value": 7140,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-05",
+        "value": 5740,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-06",
+        "value": 5950,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-07",
+        "value": 13870,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-08",
+        "value": 13740,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-09",
+        "value": 16955,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-10",
+        "value": 12930,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-11",
+        "value": 12055,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-12",
+        "value": 11070,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-13",
+        "value": 15695,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-14",
+        "value": 10125,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-15",
+        "value": 15840,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-16",
+        "value": 12070,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-17",
+        "value": 13300,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-18",
+        "value": 7170,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-19",
+        "value": 12755,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-20",
+        "value": 13740,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-21",
+        "value": 6940,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-22",
+        "value": 11260,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-23",
+        "value": 15240,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-24",
+        "value": 8835,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-25",
+        "value": 7410,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-26",
+        "value": 9515,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-27",
+        "value": 7585,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-28",
+        "value": 11370,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-29",
+        "value": 10400,
+        "user_id": 1
+    },
+    {
+        "dateTime": "2024-01-30",
+        "value": 4030,
+        "user_id": 1
+    }
+]
+
+AZM Json Format:
+
+
+[
+    {
+    "activities-active-zone-minutes-intraday": [
+        {
+            "dateTime": "2020-09-17",
+            "minutes": [
+                {
+                    "minute": "2020-09-17T17:00:00",
+                    "value": {
+                        "fatBurnActiveZoneMinutes": 1,
+                        "activeZoneMinutes": 1
+                    }
+                },
+                {
+                    "minute": "2020-09-17T17:01:00",
+                    "value": {
+                        "cardioActiveZoneMinutes": 1,
+                        "activeZoneMinutes": 1
+                    }
+                },
+                {
+                    "minute": "2020-09-17T17:02:00",
+                    "value": {
+                        "activeZoneMinutes": 0
+                    }
+                }
+            ]
+        }
+    ], 
+    "user_id": 1
+    }
+]
+
+
+Breathing Rate JSON Format:
+
+[
+    {
+        "br": [
+            {
+                "value": {
+                    "deepSleepSummary": {
+                        "breathingRate": 13.416374302411418
+                    },
+                    "remSleepSummary": {
+                        "breathingRate": 16.777532482906025
+                    },
+                    "lightSleepSummary": {
+                        "breathingRate": 17.76544180391895
+                    },
+                    "fullSleepSummary": {
+                        "breathingRate": 14.485806020620345
+                    }
+                },
+                "dateTime": "2024-01-01"
+            }
+        ],
+        "user_id": 1
+    },
+]
+
+HRV Json Format:
+
+[
+    {
+        "hrv": [
+            {
+                "minutes": [
+                    {
+                        "minute": "2024-01-01T00:48:56.000",
+                        "value": {
+                            "rmssd": 57.039,
+                            "coverage": 0.93,
+                            "hf": 986.136,
+                            "lf": 342.633
+                        }
+                    },
+                    {
+                        "minute": "2024-01-01T00:49:56.000",
+                        "value": {
+                            "rmssd": 74.616,
+                            "coverage": 0.944,
+                            "hf": 298.252,
+                            "lf": 90.196
+                        }
+                    },
+                    {
+                        "minute": "2024-01-01T00:50:56.000",
+                        "value": {
+                            "rmssd": 21.006,
+                            "coverage": 0.989,
+                            "hf": 303.357,
+                            "lf": 106.211
+                        }
+                    },
+                    {
+                        "minute": "2024-01-01T00:51:56.000",
+                        "value": {
+                            "rmssd": 39.819,
+                            "coverage": 0.954,
+                            "hf": 807.098,
+                            "lf": 223.475
+                        }
+                    },
+                    {
+                        "minute": "2024-01-01T00:52:56.000",
+                        "value": {
+                            "rmssd": 67.875,
+                            "coverage": 0.901,
+                            "hf": 113.816,
+                            "lf": 35.036
+                        }
+                    },
+                    {
+                        "minute": "2024-01-01T00:53:56.000",
+                        "value": {
+                            "rmssd": 41.306,
+                            "coverage": 0.901,
+                            "hf": 568.832,
+                            "lf": 185.336
+                        }
+                    },
+                    {
+                        "minute": "2024-01-01T00:54:56.000",
+                        "value": {
+                            "rmssd": 20.579,
+                            "coverage": 0.929,
+                            "hf": 736.352,
+                            "lf": 226.03
+                        }
+                    },
+                    ....
+                ]
+            }
+        ],
+        "user_id": 1
+    }
+]
+
+SPo2 Json Format:
+
+
+[
+    {
+        "dateTime": "2024-01-01",
+        "minutes": [
+            {
+                "value": 97.4,
+                "minute": "2024-01-01T00:48:56"
+            },
+            {
+                "value": 97.80000000000001,
+                "minute": "2024-01-01T00:49:56"
+            },
+            {
+                "value": 97.80000000000001,
+                "minute": "2024-01-01T00:50:56"
+            },
+            {
+                "value": 98.20000000000002,
+                "minute": "2024-01-01T00:51:56"
+            },
+            {
+                "value": 98.50000000000001,
+                "minute": "2024-01-01T00:52:56"
+            },
+            {
+                "value": 98.00000000000001,
+                "minute": "2024-01-01T00:53:56"
+            },
+            {
+                "value": 98.50000000000001,
+                "minute": "2024-01-01T00:54:56"
+            },
+            {
+                "value": 98.10000000000001,
+                "minute": "2024-01-01T00:55:56"
+            },
+        ]
+        "user_id": 1
+    }
+]

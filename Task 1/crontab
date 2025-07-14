@@ -1,0 +1,4 @@
+# /etc/cron.d/ingestion-cron
+# Run ingestion job at 1:00 AM every day
+0 1 * * * root cd /app && python /app/ingestions.py >> /var/log/cron.log 2>&1
+
