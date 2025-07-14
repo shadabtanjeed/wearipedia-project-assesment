@@ -1,0 +1,3 @@
+0 1 * * * cd /app && python ingestions.py >> /var/log/cron.log 2>&1
+
+
