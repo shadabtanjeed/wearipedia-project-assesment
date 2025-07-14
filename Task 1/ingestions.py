@@ -342,11 +342,24 @@ def main():
     parser.add_argument(
         "--single-day", action="store_true", help="Process only one day of data"
     )
+    parser.add_argument(
+        "--check-files", action="store_true", help="Check and fix file mappings"
+    )
     args = parser.parse_args()
 
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
         logger.debug("Debug mode enabled")
+
+    # Check and fix file mappings if requested
+    if args.check_files:
+        try:
+            from fix_source_adapter import fix_adapter_mapping
+
+            fix_adapter_mapping()
+            logger.info("Fixed file mappings")
+        except Exception as e:
+            logger.error(f"Failed to fix file mappings: {e}")
 
     # Initialize components
     adapter = SourceAdapterFactory.create_adapter("synthetic", data_dir=DATA_DIR)
@@ -369,6 +382,15 @@ def main():
                 logger.info(f"Removed timestamp file: {timestamp_file}")
             except Exception as e:
                 logger.error(f"Failed to remove timestamp file {timestamp_file}: {e}")
+
+        # Also reset database timestamps
+        try:
+            from fix_source_adapter import reset_db_timestamps
+
+            reset_db_timestamps()
+            logger.info("Reset database timestamps")
+        except Exception as e:
+            logger.error(f"Failed to reset database timestamps: {e}")
 
     # Define metric types to process - updated to match source adapter expectations
     metric_types = [
@@ -424,60 +446,33 @@ def main():
 
             logger.info(f"==== Processing data for User {user_id} ====")
 
-            for metric_type in metric_types:
+            for metric_type in available_data[user_id]:
                 logger.info(f"-- Processing {metric_type} for User {user_id} --")
 
                 last_run = read_last_timestamp(metric_type, user_id)
 
-                # MODIFIED: Only process one day instead of going to today
-                if args.single_day:
-                    # Process only the next day from last_run
-                    target_date = last_run
-                    logger.info(
-                        f"Single-day mode: Processing {metric_type} data for {target_date.date()} for user {user_id}"
-                    )
+                # Always process only one day at a time for better control
+                # Process only the next day from last_run
+                target_date = last_run
+                logger.info(
+                    f"Processing {metric_type} data for {target_date.date()} for user {user_id}"
+                )
 
-                    # Process single day
-                    process_metrics(
-                        adapter,
-                        metric_factory,
-                        db,
-                        metric_type,
-                        target_date,
-                        target_date,
-                        user_id,
-                    )
+                # Process single day
+                process_metrics(
+                    adapter,
+                    metric_factory,
+                    db,
+                    metric_type,
+                    target_date,
+                    target_date,
+                    user_id,
+                )
 
-                    # Update timestamp to next day
-                    next_day = target_date + timedelta(days=1)
-                    write_timestamp(metric_type, next_day, user_id)
-                    logger.info(f"Updated timestamp to {next_day.date()} for next run")
-                else:
-                    # Original behavior: process from last_run to today
-                    today = datetime.now().replace(
-                        tzinfo=last_run.tzinfo if last_run.tzinfo else None
-                    )
-
-                    logger.info(
-                        f"Processing {metric_type} data from {last_run.date()} to {today.date()} for user {user_id}"
-                    )
-
-                    # Process each day individually to maintain order
-                    current_date = last_run
-                    while current_date <= today:
-                        process_metrics(
-                            adapter,
-                            metric_factory,
-                            db,
-                            metric_type,
-                            current_date,
-                            current_date,
-                            user_id,
-                        )
-
-                        # Update timestamp after each day
-                        write_timestamp(metric_type, current_date, user_id)
-                        current_date += timedelta(days=1)
+                # Update timestamp to next day
+                next_day = target_date + timedelta(days=1)
+                write_timestamp(metric_type, next_day, user_id)
+                logger.info(f"Updated timestamp to {next_day.date()} for next run")
 
                 logger.info(
                     f"Completed processing {metric_type} data for user {user_id}"

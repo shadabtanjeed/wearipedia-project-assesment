@@ -1,439 +1,274 @@
+import os
 import logging
 import psycopg2
 from psycopg2.extras import execute_values
-from typing import List, Dict, Any, Optional
+from typing import Dict, List, Optional, Any
 from datetime import datetime
-import json
 
 logger = logging.getLogger("DBOperations")
 
 
 class DBOperations:
-    def __init__(self, host: str, port: int, dbname: str, user: str, password: str):
-        # initialize the database connection parameters
-        self.conn_params = {
-            "host": host,
-            "port": port,
-            "dbname": dbname,
-            "user": user,
-            "password": password,
-        }
-        self.conn = None
+    """Database operations class for interacting with TimescaleDB"""
 
-    def connect(self):
+    def __init__(self, host: str, port: int, database: str, user: str, password: str):
+        """Initialize database connection parameters"""
+        self.host = host
+        self.port = port
+        self.database = database
+        self.user = user
+        self.password = password
+        self.conn = None
+        self.cursor = None
+
+    def connect(self) -> bool:
+        """Connect to the database"""
         try:
-            self.conn = psycopg2.connect(**self.conn_params)
+            self.conn = psycopg2.connect(
+                host=self.host,
+                port=self.port,
+                database=self.database,
+                user=self.user,
+                password=self.password,
+            )
+            self.cursor = self.conn.cursor()
             logger.info("Successfully connected to database")
             return True
         except Exception as e:
-            logger.error(f"Failed to connect to database: {str(e)}")
+            logger.error(f"Error connecting to database: {e}")
             return False
 
     def close(self):
-        if self.conn:
-            self.conn.close()
-            logger.info("Database connection closed")
-
-    def ensure_user_exists(
-        self, user_id: int, name: Optional[str] = None, email: Optional[str] = None
-    ):
+        """Close the database connection"""
         try:
-            with self.conn.cursor() as cur:
-                # Check if user exists
-                cur.execute("SELECT 1 FROM users WHERE user_id = %s", (user_id,))
-                if cur.fetchone() is None:
-                    # Create user if doesn't exist
-                    cur.execute(
-                        "INSERT INTO users (user_id, name, email) VALUES (%s, %s, %s)",
-                        (
-                            user_id,
-                            name or f"User {user_id}",
-                            email or f"user{user_id}@example.com",
-                        ),
-                    )
-                    self.conn.commit()
-                    logger.info(f"Created new user: {user_id}")
+            if self.cursor:
+                self.cursor.close()
+            if self.conn:
+                self.conn.close()
+                logger.info("Database connection closed")
         except Exception as e:
+            logger.error(f"Error closing database connection: {e}")
+
+    def ensure_user_exists(self, user_id: int) -> bool:
+        """Ensure a user exists in the database, creating if necessary"""
+        if not self.conn or self.conn.closed:
+            if not self.connect():
+                return False
+
+        try:
+            # Check if user exists
+            self.cursor.execute("SELECT 1 FROM USERS WHERE USER_ID = %s", (user_id,))
+            if self.cursor.fetchone() is None:
+                # Insert new user
+                self.cursor.execute(
+                    "INSERT INTO USERS (USER_ID) VALUES (%s) ON CONFLICT DO NOTHING",
+                    (user_id,),
+                )
+                self.conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error ensuring user exists: {e}")
             self.conn.rollback()
-            logger.error(f"Error ensuring user exists: {str(e)}")
+            return False
 
     def ensure_device_exists(
-        self,
-        device_id: str,
-        user_id: int,
-        device_type: str,
-        model: Optional[str] = None,
-    ):
-        try:
-            with self.conn.cursor() as cur:
-                # Check if device exists
-                cur.execute("SELECT 1 FROM devices WHERE device_id = %s", (device_id,))
-                if cur.fetchone() is None:
-                    # Create device if doesn't exist
-                    cur.execute(
-                        "INSERT INTO devices (device_id, user_id, device_type, model) VALUES (%s, %s, %s, %s)",
-                        (device_id, user_id, device_type, model),
-                    )
-                    self.conn.commit()
-                    logger.info(f"Created new device: {device_id}")
-        except Exception as e:
-            self.conn.rollback()
-            logger.error(f"Error ensuring device exists: {str(e)}")
-
-    def get_table_name(self, metric_type: str) -> str:
-        """Get the table name for a given metric type."""
-        table_mapping = {
-            "hr": "heart_rate",
-            "spo2": "spo2",
-            "hrv": "hrv",
-            "br": "breathing_rate",
-            "azm": "active_zone_minutes",
-            "activity": "activity",
-        }
-        return table_mapping.get(metric_type, "raw_data")
-
-    def insert_heart_rate_metrics(self, metrics: List[Dict[str, Any]]):
-        """Insert heart rate metrics into heart_rate table."""
-        if not metrics:
-            return
+        self, device_id: str, user_id: int, device_type: str, model: str
+    ) -> bool:
+        """Ensure a device exists in the database, creating if necessary"""
+        if not self.conn or self.conn.closed:
+            if not self.connect():
+                return False
 
         try:
-            with self.conn.cursor() as cur:
-                values = [
-                    (
-                        m["user_id"],
-                        m["device_id"],
-                        m["timestamp"],
-                        m["value"],
-                        m.get("resting_heart_rate"),
-                        json.dumps(m.get("zones")) if m.get("zones") else None,
-                    )
-                    for m in metrics
-                ]
-
-                execute_values(
-                    cur,
+            # Check if device exists
+            self.cursor.execute(
+                "SELECT 1 FROM DEVICES WHERE DEVICE_ID = %s", (device_id,)
+            )
+            if self.cursor.fetchone() is None:
+                # Insert new device
+                self.cursor.execute(
                     """
-                    INSERT INTO heart_rate (user_id, device_id, timestamp, value, resting_heart_rate, zones)
-                    VALUES %s
-                    ON CONFLICT (id, timestamp) DO UPDATE SET
-                        value = EXCLUDED.value,
-                        resting_heart_rate = EXCLUDED.resting_heart_rate,
-                        zones = EXCLUDED.zones
+                    INSERT INTO DEVICES (DEVICE_ID, USER_ID, DEVICE_TYPE, MODEL) 
+                    VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING
                     """,
-                    values,
+                    (device_id, user_id, device_type, model),
                 )
-
                 self.conn.commit()
-                logger.info(f"Successfully inserted {len(metrics)} heart rate metrics")
+            return True
         except Exception as e:
+            logger.error(f"Error ensuring device exists: {e}")
             self.conn.rollback()
-            logger.error(f"Error inserting heart rate metrics: {str(e)}")
-            raise
+            return False
 
-    def insert_spo2_metrics(self, metrics: List[Dict[str, Any]]):
-        """Insert SpO2 metrics into spo2 table."""
-        if not metrics:
-            return
-
-        try:
-            with self.conn.cursor() as cur:
-                values = [
-                    (
-                        m["user_id"],
-                        m["device_id"],
-                        m["timestamp"],
-                        m["value"],
-                        (
-                            json.dumps(m.get("minute_data"))
-                            if m.get("minute_data")
-                            else None
-                        ),
-                    )
-                    for m in metrics
-                ]
-
-                execute_values(
-                    cur,
-                    """
-                    INSERT INTO spo2 (user_id, device_id, timestamp, value, minute_data)
-                    VALUES %s
-                    ON CONFLICT (id, timestamp) DO UPDATE SET
-                        value = EXCLUDED.value,
-                        minute_data = EXCLUDED.minute_data
-                    """,
-                    values,
-                )
-
-                self.conn.commit()
-                logger.info(f"Successfully inserted {len(metrics)} SpO2 metrics")
-        except Exception as e:
-            self.conn.rollback()
-            logger.error(f"Error inserting SpO2 metrics: {str(e)}")
-            raise
-
-    def insert_hrv_metrics(self, metrics: List[Dict[str, Any]]):
-        """Insert HRV metrics into hrv table."""
-        if not metrics:
-            return
-
-        try:
-            with self.conn.cursor() as cur:
-                values = [
-                    (
-                        m["user_id"],
-                        m["device_id"],
-                        m["timestamp"],
-                        m.get("rmssd"),
-                        m.get("coverage"),
-                        m.get("hf"),
-                        m.get("lf"),
-                        (
-                            json.dumps(m.get("minute_data"))
-                            if m.get("minute_data")
-                            else None
-                        ),
-                    )
-                    for m in metrics
-                ]
-
-                execute_values(
-                    cur,
-                    """
-                    INSERT INTO hrv (user_id, device_id, timestamp, rmssd, coverage, hf, lf, minute_data)
-                    VALUES %s
-                    ON CONFLICT (id, timestamp) DO UPDATE SET
-                        rmssd = EXCLUDED.rmssd,
-                        coverage = EXCLUDED.coverage,
-                        hf = EXCLUDED.hf,
-                        lf = EXCLUDED.lf,
-                        minute_data = EXCLUDED.minute_data
-                    """,
-                    values,
-                )
-
-                self.conn.commit()
-                logger.info(f"Successfully inserted {len(metrics)} HRV metrics")
-        except Exception as e:
-            self.conn.rollback()
-            logger.error(f"Error inserting HRV metrics: {str(e)}")
-            raise
-
-    def insert_breathing_rate_metrics(self, metrics: List[Dict[str, Any]]):
-        """Insert breathing rate metrics into breathing_rate table."""
-        if not metrics:
-            return
-
-        try:
-            with self.conn.cursor() as cur:
-                values = [
-                    (
-                        m["user_id"],
-                        m["device_id"],
-                        m["timestamp"],
-                        m.get("deep_sleep_rate"),
-                        m.get("rem_sleep_rate"),
-                        m.get("light_sleep_rate"),
-                        m.get("full_sleep_rate"),
-                    )
-                    for m in metrics
-                ]
-
-                execute_values(
-                    cur,
-                    """
-                    INSERT INTO breathing_rate (user_id, device_id, timestamp, deep_sleep_rate, rem_sleep_rate, light_sleep_rate, full_sleep_rate)
-                    VALUES %s
-                    ON CONFLICT (id, timestamp) DO UPDATE SET
-                        deep_sleep_rate = EXCLUDED.deep_sleep_rate,
-                        rem_sleep_rate = EXCLUDED.rem_sleep_rate,
-                        light_sleep_rate = EXCLUDED.light_sleep_rate,
-                        full_sleep_rate = EXCLUDED.full_sleep_rate
-                    """,
-                    values,
-                )
-
-                self.conn.commit()
-                logger.info(
-                    f"Successfully inserted {len(metrics)} breathing rate metrics"
-                )
-        except Exception as e:
-            self.conn.rollback()
-            logger.error(f"Error inserting breathing rate metrics: {str(e)}")
-            raise
-
-    def insert_active_zone_minutes_metrics(self, metrics: List[Dict[str, Any]]):
-        """Insert active zone minutes metrics into active_zone_minutes table."""
-        if not metrics:
-            return
-
-        try:
-            with self.conn.cursor() as cur:
-                values = [
-                    (
-                        m["user_id"],
-                        m["device_id"],
-                        m["timestamp"],
-                        m.get("fat_burn_minutes"),
-                        m.get("cardio_minutes"),
-                        m.get("peak_minutes"),
-                        m.get("active_zone_minutes"),
-                        (
-                            json.dumps(m.get("minute_data"))
-                            if m.get("minute_data")
-                            else None
-                        ),
-                    )
-                    for m in metrics
-                ]
-
-                execute_values(
-                    cur,
-                    """
-                    INSERT INTO active_zone_minutes (user_id, device_id, timestamp, fat_burn_minutes, cardio_minutes, peak_minutes, active_zone_minutes, minute_data)
-                    VALUES %s
-                    ON CONFLICT (id, timestamp) DO UPDATE SET
-                        fat_burn_minutes = EXCLUDED.fat_burn_minutes,
-                        cardio_minutes = EXCLUDED.cardio_minutes,
-                        peak_minutes = EXCLUDED.peak_minutes,
-                        active_zone_minutes = EXCLUDED.active_zone_minutes,
-                        minute_data = EXCLUDED.minute_data
-                    """,
-                    values,
-                )
-
-                self.conn.commit()
-                logger.info(
-                    f"Successfully inserted {len(metrics)} active zone minutes metrics"
-                )
-        except Exception as e:
-            self.conn.rollback()
-            logger.error(f"Error inserting active zone minutes metrics: {str(e)}")
-            raise
-
-    def insert_activity_metrics(self, metrics: List[Dict[str, Any]]):
-        """Insert activity metrics into activity table."""
-        if not metrics:
-            return
-
-        try:
-            with self.conn.cursor() as cur:
-                values = [
-                    (m["user_id"], m["device_id"], m["timestamp"], m["value"])
-                    for m in metrics
-                ]
-
-                execute_values(
-                    cur,
-                    """
-                    INSERT INTO activity (user_id, device_id, timestamp, value)
-                    VALUES %s
-                    ON CONFLICT (id, timestamp) DO UPDATE SET
-                        value = EXCLUDED.value
-                    """,
-                    values,
-                )
-
-                self.conn.commit()
-                logger.info(f"Successfully inserted {len(metrics)} activity metrics")
-        except Exception as e:
-            self.conn.rollback()
-            logger.error(f"Error inserting activity metrics: {str(e)}")
-            raise
-
-    def insert_metrics(self, metric_type: str, metrics: List[Dict[str, Any]]):
-        """Insert metrics into appropriate table based on metric type."""
-        if not metrics:
-            logger.info(f"No {metric_type} metrics to insert")
-            return
-
-        # Sort metrics by timestamp to ensure correct ordering
-        sorted_metrics = sorted(metrics, key=lambda x: x["timestamp"])
-
-        insertion_methods = {
-            "hr": self.insert_heart_rate_metrics,
-            "spo2": self.insert_spo2_metrics,
-            "hrv": self.insert_hrv_metrics,
-            "br": self.insert_breathing_rate_metrics,
-            "azm": self.insert_active_zone_minutes_metrics,
-            "activity": self.insert_activity_metrics,
-        }
-
-        if metric_type in insertion_methods:
-            insertion_methods[metric_type](sorted_metrics)
-        else:
-            logger.error(f"Unknown metric type: {metric_type}")
-
-    def get_latest_timestamp(
-        self, metric_type: str, user_id: Optional[int] = None
-    ) -> Optional[str]:
-        """Get the latest timestamp for a specific metric type and user."""
-        try:
-            table_name = self.get_table_name(metric_type)
-            query = f"SELECT MAX(timestamp) FROM {table_name}"
-            params = []
-
-            if user_id:
-                query += " WHERE user_id = %s"
-                params.append(user_id)
-
-            with self.conn.cursor() as cur:
-                cur.execute(query, params)
-                result = cur.fetchone()
-
-                if result and result[0]:
-                    return result[0].isoformat()
+    def get_last_processed_date(
+        self, metric_type: str, user_id: int
+    ) -> Optional[datetime]:
+        """Get the last processed date for a specific metric type and user"""
+        if not self.conn or self.conn.closed:
+            if not self.connect():
                 return None
+
+        try:
+            # Query the last processed date
+            self.cursor.execute(
+                """
+                SELECT LAST_PROCESSED_DATE FROM LAST_PROCESSED_DATES 
+                WHERE METRIC_TYPE = %s AND USER_ID = %s
+                """,
+                (metric_type, user_id),
+            )
+            result = self.cursor.fetchone()
+            if result:
+                return result[0]
+            return None
         except Exception as e:
-            logger.error(f"Error getting latest timestamp for {metric_type}: {str(e)}")
+            logger.error(f"Error getting last processed date: {e}")
             return None
 
     def update_last_processed_date(
-        self, metric_type: str, user_id: int, processed_date: datetime
-    ):
-        """Update the last processed date for a metric type and user."""
+        self, metric_type: str, user_id: int, timestamp: datetime
+    ) -> bool:
+        """Update the last processed date for a specific metric type and user"""
+        if not self.conn or self.conn.closed:
+            if not self.connect():
+                return False
+
         try:
-            with self.conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO last_processed_dates (metric_type, user_id, last_processed_date)
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (metric_type) DO UPDATE SET
-                        user_id = EXCLUDED.user_id,
-                        last_processed_date = EXCLUDED.last_processed_date,
-                        updated_at = NOW()
-                    """,
-                    (metric_type, user_id, processed_date),
-                )
-                self.conn.commit()
-                logger.info(
-                    f"Updated last processed date for {metric_type}: {processed_date}"
-                )
-        except Exception as e:
-            self.conn.rollback()
-            logger.error(f"Error updating last processed date: {str(e)}")
-
-    def get_last_processed_date(
-        self, metric_type: str, user_id: Optional[int] = None
-    ) -> Optional[datetime]:
-        """Get the last processed date for a metric type and user."""
-        try:
-            query = "SELECT last_processed_date FROM last_processed_dates WHERE metric_type = %s"
-            params = [metric_type]
-
-            if user_id:
-                query += " AND user_id = %s"
-                params.append(user_id)
-
-            with self.conn.cursor() as cur:
-                cur.execute(query, params)
-                result = cur.fetchone()
-
-                if result and result[0]:
-                    return result[0]
-                return None
-        except Exception as e:
-            logger.error(
-                f"Error getting last processed date for {metric_type}: {str(e)}"
+            # Insert or update the last processed date
+            self.cursor.execute(
+                """
+                INSERT INTO LAST_PROCESSED_DATES (METRIC_TYPE, USER_ID, LAST_PROCESSED_DATE) 
+                VALUES (%s, %s, %s) 
+                ON CONFLICT (METRIC_TYPE, USER_ID) 
+                DO UPDATE SET LAST_PROCESSED_DATE = %s, UPDATED_AT = NOW()
+                """,
+                (metric_type, user_id, timestamp, timestamp),
             )
-            return None
+            self.conn.commit()
+            logger.info(f"Updated last processed date for {metric_type}: {timestamp}")
+            return True
+        except Exception as e:
+            logger.error(f"Error updating last processed date: {e}")
+            self.conn.rollback()
+            return False
+
+    def insert_metrics(self, metric_type: str, metrics: List[Dict]) -> bool:
+        """Insert metrics into the appropriate table"""
+        if not metrics:
+            logger.warning(f"No {metric_type} metrics to insert")
+            return False
+
+        if not self.conn or self.conn.closed:
+            if not self.connect():
+                return False
+
+        try:
+            # Determine the appropriate table and columns based on metric_type
+            table_name, columns, values_list = self._prepare_metrics_for_insertion(
+                metric_type, metrics
+            )
+
+            # Construct placeholders for the VALUES clause
+            placeholders = ", ".join(["%s"] * len(columns))
+            columns_str = ", ".join(columns)
+
+            # Use execute_values for bulk insertion
+            execute_values(
+                self.cursor,
+                f"INSERT INTO {table_name} ({columns_str}) VALUES %s ON CONFLICT DO NOTHING",
+                values_list,
+                template=f"({placeholders})",
+                page_size=1000,  # Insert in batches of 1000
+            )
+            self.conn.commit()
+            logger.info(f"Successfully inserted {len(metrics)} {metric_type} metrics")
+            return True
+        except Exception as e:
+            logger.error(f"Error inserting {metric_type} metrics: {e}")
+            import traceback
+
+            logger.error(traceback.format_exc())
+            self.conn.rollback()
+            return False
+
+    def _prepare_metrics_for_insertion(
+        self, metric_type: str, metrics: List[Dict]
+    ) -> tuple:
+        """Prepare metrics for insertion based on metric type"""
+        table_name = self._get_table_name(metric_type)
+        columns = self._get_columns_for_metric_type(metric_type)
+        values_list = []
+
+        # Prepare values list based on columns
+        for metric in metrics:
+            row_values = []
+            for col in columns:
+                # Convert column name to lowercase for case-insensitive lookup
+                col_lower = col.lower()
+                value = metric.get(col_lower, None)
+
+                # Serialize JSON/dict data for PostgreSQL
+                if isinstance(value, (dict, list)) and col in [
+                    "ZONES",
+                    "SUMMARY",
+                    "INTRADAY",
+                    "MINUTE_DATA",
+                ]:
+                    # Convert Python dict/list to JSON string
+                    import json
+
+                    value = json.dumps(value)
+
+                row_values.append(value)
+            values_list.append(tuple(row_values))
+
+        return table_name, columns, values_list
+
+    def _get_table_name(self, metric_type: str) -> str:
+        """Get the appropriate table name for a metric type"""
+        mapping = {
+            "hr": "HEART_RATE",
+            "spo2": "SPO2",
+            "hrv": "HRV",
+            "br": "BREATHING_RATE",
+            "azm": "ACTIVE_ZONE_MINUTES",
+            "activity": "ACTIVITY",
+        }
+        return mapping.get(metric_type, metric_type.upper())
+
+    def _get_columns_for_metric_type(self, metric_type: str) -> List[str]:
+        """Get the appropriate columns for a metric type"""
+        base_columns = ["USER_ID", "DEVICE_ID", "TIMESTAMP"]
+
+        if metric_type == "hr":
+            return base_columns + [
+                "VALUE",
+                "RESTING_HEART_RATE",
+                "ZONES",
+                "SUMMARY",
+                "INTRADAY",
+            ]
+        elif metric_type == "spo2":
+            return base_columns + ["VALUE", "MINUTE_DATA"]
+        elif metric_type == "hrv":
+            return base_columns + ["RMSSD", "COVERAGE", "HF", "LF", "MINUTE_DATA"]
+        elif metric_type == "br":
+            return base_columns + [
+                "DEEP_SLEEP_RATE",
+                "REM_SLEEP_RATE",
+                "LIGHT_SLEEP_RATE",
+                "FULL_SLEEP_RATE",
+            ]
+        elif metric_type == "azm":
+            return base_columns + [
+                "FAT_BURN_MINUTES",
+                "CARDIO_MINUTES",
+                "PEAK_MINUTES",
+                "ACTIVE_ZONE_MINUTES",
+                "MINUTE_DATA",
+            ]
+        elif metric_type == "activity":
+            return base_columns + ["VALUE"]
+        else:
+            logger.warning(f"Unknown metric type: {metric_type}, using base columns")
+            return base_columns

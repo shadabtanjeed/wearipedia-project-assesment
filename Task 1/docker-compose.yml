@@ -1,41 +1,45 @@
+version: '3.8'
+
 services:
   timescaledb:
     image: timescale/timescaledb:latest-pg17
+    container_name: task1-timescaledb
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: fitbit_data
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-    volumes:
-      - timescale_data:/var/lib/postgresql/data
-      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=fitbit_data
     ports:
       - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d fitbit_data"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - wearipedia-net
 
   ingestion:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
-    depends_on:
-      timescaledb:
-        condition: service_healthy
+    container_name: task1-ingestion
     environment:
       - DB_HOST=timescaledb
       - DB_PORT=5432
       - DB_NAME=fitbit_data
       - DB_USER=postgres
       - DB_PASSWORD=password
-      - TEST_MODE=${TEST_MODE:-true}  # Set to true for debugging
-      - TEST_INTERVAL=${TEST_INTERVAL:-300}
-      - DATA_DIR=/app/Data/Modified Data  # Explicitly set the data directory
     volumes:
-      - ../Data:/app/Data
-      - ingestion_state:/app/state
-      - ./logs:/var/log
-    # Add this for debugging
-    stdin_open: true
-    tty: true
+      - .:/app
+      - ./state:/app/state  # Changed from ingestion_state to state
+    depends_on:
+      - timescaledb
+    networks:
+      - wearipedia-net
+
+volumes:
+  timescaledb_data:
+  # Remove the reference to ingestion_state volume as it's not needed
+
+networks:
+  wearipedia-net:
+    driver: bridge
