@@ -3,9 +3,12 @@ import { Container, Typography, Box, Paper, CircularProgress, Alert, Button } fr
 import UserSelector from './components/UserSelector';
 import DateRangePicker from './components/DateRangePicker';
 import HeartRateChart from './components/HeartRateChart';
+import HeartRateZoneChart from './components/HeartRateZoneChart';
+import SpO2Chart from './components/SpO2Chart';
 import { API_URL } from './services/api';
 import { fetchUsers } from './services/users_api';
-import { fetchDailyAvgHeartRateData } from './services/heartRate_api';
+import { fetchDailyAvgHeartRateData, fetchHeartRateZonesData } from './services/heartRate_api';
+import { fetchDailyAvgSpO2Data } from './services/spo2_api';
 import './App.css';
 
 function App() {
@@ -15,10 +18,21 @@ function App() {
   const [endDate, setEndDate] = useState('2024-01-31');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [healthData, setHealthData] = useState([]);
-  const [dataLoading, setDataLoading] = useState(false);
-  const [dataError, setDataError] = useState(null);
-  const [showVisualization, setShowVisualization] = useState(false);
+
+  const [heartRateData, setHeartRateData] = useState([]);
+  const [heartRateLoading, setHeartRateLoading] = useState(false);
+  const [heartRateError, setHeartRateError] = useState(null);
+
+  const [zoneData, setZoneData] = useState([]);
+  const [zoneLoading, setZoneLoading] = useState(false);
+  const [zoneError, setZoneError] = useState(null);
+
+  const [spo2Data, setSpo2Data] = useState([]);
+  const [spo2Loading, setSpo2Loading] = useState(false);
+  const [spo2Error, setSpo2Error] = useState(null);
+
+  const [showAllVisualizations, setShowAllVisualizations] = useState(false);
+  const [visualizationLoading, setVisualizationLoading] = useState(false);
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -43,43 +57,111 @@ function App() {
     loadUsers();
   }, []);
 
-  const handleVisualize = async () => {
+  const handleVisualizeAll = async () => {
     if (!selectedUser) {
-      setDataError("Please select a user");
+      setHeartRateError("Please select a user");
+      setZoneError("Please select a user");
+      setSpo2Error("Please select a user");
       return;
     }
 
-    setDataLoading(true);
-    setDataError(null);
-    setShowVisualization(true);
+    setVisualizationLoading(true);
+    setShowAllVisualizations(true);
+
+    await Promise.all([
+      fetchHeartRateData(),
+      fetchZoneData(),
+      fetchSpO2Data()
+    ]);
+
+    setVisualizationLoading(false);
+  };
+
+  const fetchHeartRateData = async () => {
+    setHeartRateLoading(true);
+    setHeartRateError(null);
 
     try {
-      // Using daily average by default
       const response = await fetchDailyAvgHeartRateData(selectedUser, startDate, endDate);
 
       if (response.success) {
-        // Process data to ensure timestamp is in the right format for charts
         const processedData = response.data.map(item => ({
           timestamp: new Date(item.day).getTime(),
           value: item.avg_heart_rate,
           resting_heart_rate: item.avg_resting_heart_rate
         })).sort((a, b) => a.timestamp - b.timestamp);
 
-        setHealthData(processedData);
+        setHeartRateData(processedData);
 
         if (response.warning) {
-          setDataError(response.warning);
+          setHeartRateError(response.warning);
         } else {
-          setDataError(null);
+          setHeartRateError(null);
         }
       } else {
-        setDataError('Failed to fetch health data');
+        setHeartRateError('Failed to fetch heart rate data');
       }
     } catch (err) {
-      setDataError(`Error fetching health data: ${err.message}`);
+      setHeartRateError(`Error fetching heart rate data: ${err.message}`);
       console.error(err);
     } finally {
-      setDataLoading(false);
+      setHeartRateLoading(false);
+    }
+  };
+
+  const fetchZoneData = async () => {
+    setZoneLoading(true);
+    setZoneError(null);
+
+    try {
+      const response = await fetchHeartRateZonesData(selectedUser, startDate, endDate);
+
+      if (response.success) {
+        setZoneData(response.data || []);
+        if (response.warning) {
+          setZoneError(response.warning);
+        } else {
+          setZoneError(null);
+        }
+      } else {
+        setZoneError('Failed to fetch heart rate zone data');
+      }
+    } catch (err) {
+      setZoneError(`Error fetching heart rate zone data: ${err.message}`);
+      console.error(err);
+    } finally {
+      setZoneLoading(false);
+    }
+  };
+
+  const fetchSpO2Data = async () => {
+    setSpo2Loading(true);
+    setSpo2Error(null);
+
+    try {
+      const response = await fetchDailyAvgSpO2Data(selectedUser, startDate, endDate);
+
+      if (response.success) {
+        const processedData = response.data.map(item => ({
+          timestamp: new Date(item.day).getTime(),
+          value: item.avg_spo2
+        })).sort((a, b) => a.timestamp - b.timestamp);
+
+        setSpo2Data(processedData);
+
+        if (response.warning) {
+          setSpo2Error(response.warning);
+        } else {
+          setSpo2Error(null);
+        }
+      } else {
+        setSpo2Error('Failed to fetch SpO2 data');
+      }
+    } catch (err) {
+      setSpo2Error(`Error fetching SpO2 data: ${err.message}`);
+      console.error(err);
+    } finally {
+      setSpo2Loading(false);
     }
   };
 
@@ -137,11 +219,11 @@ function App() {
                 <Button
                   variant="contained"
                   color="primary"
-                  onClick={handleVisualize}
-                  disabled={!selectedUser || loading}
+                  onClick={handleVisualizeAll}
+                  disabled={!selectedUser || loading || visualizationLoading}
                   sx={{ py: 1.5, px: 4 }}
                 >
-                  Visualize Health Data
+                  {visualizationLoading ? 'Loading...' : 'Visualize All Health Data'}
                 </Button>
               </Box>
             </>
@@ -159,20 +241,50 @@ function App() {
           </Box>
         )}
 
-        {showVisualization && (
-          <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
-            <Typography variant="h5" gutterBottom>
-              Heart Rate Visualization
-            </Typography>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Daily average heart rate values
-            </Typography>
-            <HeartRateChart
-              data={healthData}
-              loading={dataLoading}
-              error={dataError}
-            />
-          </Paper>
+        {showAllVisualizations && (
+          <>
+            <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
+              <Typography variant="h5" gutterBottom>
+                Heart Rate Analysis
+              </Typography>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Daily average heart rate values with resting heart rate comparison
+              </Typography>
+              <HeartRateChart
+                data={heartRateData}
+                loading={heartRateLoading}
+                error={heartRateError}
+              />
+            </Paper>
+
+            <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
+              <Typography variant="h5" gutterBottom>
+                Heart Rate Zone Distribution
+              </Typography>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Time spent in each heart rate zone per day
+              </Typography>
+              <HeartRateZoneChart
+                data={zoneData}
+                loading={zoneLoading}
+                error={zoneError}
+              />
+            </Paper>
+
+            <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
+              <Typography variant="h5" gutterBottom>
+                Blood Oxygen (SpO2) Analysis
+              </Typography>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Daily average SpO2 levels with normal range indicators
+              </Typography>
+              <SpO2Chart
+                data={spo2Data}
+                loading={spo2Loading}
+                error={spo2Error}
+              />
+            </Paper>
+          </>
         )}
       </Box>
     </Container>

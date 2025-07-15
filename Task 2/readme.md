@@ -2,7 +2,10 @@
 - Talk about why using  SQL query instead of ORM
 - List the fallback mechanism used in this task
 
+- the front end shows daily avg instead of every single data point as the no of data points is too high.Aggregations are not done as it is the task for next task.
+
 Knows Issues:
+- For some reason heart rate zone has same data through out the monnth. This is not a problem in data ingestion, rather it is a created due to the manipulation done on synthetically generated data. 
 
 
 To run:
