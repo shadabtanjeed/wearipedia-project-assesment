@@ -7,11 +7,14 @@ import HeartRateZoneChart from './components/HeartRateZoneChart';
 import SpO2Chart from './components/SpO2Chart';
 import HRVChart from './components/HRVChart';
 import HRVScatterChart from './components/HRVScatterChart';
+import BreathingRateChart from './components/BreathingRateChart';
+import BreathingRateBarChart from './components/BreathingRateBarChart';
 import { API_URL } from './services/api';
 import { fetchUsers } from './services/users_api';
 import { fetchDailyAvgHeartRateData, fetchHeartRateZonesData } from './services/heartRate_api';
 import { fetchDailyAvgSpO2Data } from './services/spo2_api';
 import { fetchDailyAvgHRVData } from './services/hrv_api';
+import { fetchAllBreathingRateData } from './services/breathingRate_api';
 import './App.css';
 
 function App() {
@@ -37,6 +40,10 @@ function App() {
   const [hrvData, setHrvData] = useState([]);
   const [hrvLoading, setHrvLoading] = useState(false);
   const [hrvError, setHrvError] = useState(null);
+
+  const [breathingRateData, setBreathingRateData] = useState([]);
+  const [breathingRateLoading, setBreathingRateLoading] = useState(false);
+  const [breathingRateError, setBreathingRateError] = useState(null);
 
   const [showAllVisualizations, setShowAllVisualizations] = useState(false);
   const [visualizationLoading, setVisualizationLoading] = useState(false);
@@ -70,6 +77,7 @@ function App() {
       setZoneError("Please select a user");
       setSpo2Error("Please select a user");
       setHrvError("Please select a user");
+      setBreathingRateError("Please select a user");
       return;
     }
 
@@ -80,7 +88,8 @@ function App() {
       fetchHeartRateData(),
       fetchZoneData(),
       fetchSpO2Data(),
-      fetchHRVData()
+      fetchHRVData(),
+      fetchBreathingRateData()
     ]);
 
     setVisualizationLoading(false);
@@ -205,6 +214,40 @@ function App() {
       console.error(err);
     } finally {
       setHrvLoading(false);
+    }
+  };
+
+  const fetchBreathingRateData = async () => {
+    setBreathingRateLoading(true);
+    setBreathingRateError(null);
+
+    try {
+      const response = await fetchAllBreathingRateData(selectedUser, startDate, endDate);
+
+      if (response.success) {
+        const processedData = response.data.map(item => ({
+          timestamp: new Date(item.timestamp).getTime(),
+          deep_sleep_rate: item.deep_sleep_rate,
+          rem_sleep_rate: item.rem_sleep_rate,
+          light_sleep_rate: item.light_sleep_rate,
+          full_sleep_rate: item.full_sleep_rate
+        })).sort((a, b) => a.timestamp - b.timestamp);
+
+        setBreathingRateData(processedData);
+
+        if (response.warning) {
+          setBreathingRateError(response.warning);
+        } else {
+          setBreathingRateError(null);
+        }
+      } else {
+        setBreathingRateError('Failed to fetch breathing rate data');
+      }
+    } catch (err) {
+      setBreathingRateError(`Error fetching breathing rate data: ${err.message}`);
+      console.error(err);
+    } finally {
+      setBreathingRateLoading(false);
     }
   };
 
@@ -353,6 +396,34 @@ function App() {
                 data={hrvData}
                 loading={hrvLoading}
                 error={hrvError}
+              />
+            </Paper>
+
+            <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
+              <Typography variant="h5" gutterBottom>
+                Breathing Rate Analysis - Sleep Phases
+              </Typography>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Breathing rates during different sleep phases over time
+              </Typography>
+              <BreathingRateChart
+                data={breathingRateData}
+                loading={breathingRateLoading}
+                error={breathingRateError}
+              />
+            </Paper>
+
+            <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
+              <Typography variant="h5" gutterBottom>
+                Breathing Rate Comparison - By Sleep Phase
+              </Typography>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Comparative view of breathing rates across different sleep phases
+              </Typography>
+              <BreathingRateBarChart
+                data={breathingRateData}
+                loading={breathingRateLoading}
+                error={breathingRateError}
               />
             </Paper>
           </>
