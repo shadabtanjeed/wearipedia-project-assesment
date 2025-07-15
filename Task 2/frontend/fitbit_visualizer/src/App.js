@@ -5,10 +5,13 @@ import DateRangePicker from './components/DateRangePicker';
 import HeartRateChart from './components/HeartRateChart';
 import HeartRateZoneChart from './components/HeartRateZoneChart';
 import SpO2Chart from './components/SpO2Chart';
+import HRVChart from './components/HRVChart';
+import HRVScatterChart from './components/HRVScatterChart';
 import { API_URL } from './services/api';
 import { fetchUsers } from './services/users_api';
 import { fetchDailyAvgHeartRateData, fetchHeartRateZonesData } from './services/heartRate_api';
 import { fetchDailyAvgSpO2Data } from './services/spo2_api';
+import { fetchDailyAvgHRVData } from './services/hrv_api';
 import './App.css';
 
 function App() {
@@ -30,6 +33,10 @@ function App() {
   const [spo2Data, setSpo2Data] = useState([]);
   const [spo2Loading, setSpo2Loading] = useState(false);
   const [spo2Error, setSpo2Error] = useState(null);
+
+  const [hrvData, setHrvData] = useState([]);
+  const [hrvLoading, setHrvLoading] = useState(false);
+  const [hrvError, setHrvError] = useState(null);
 
   const [showAllVisualizations, setShowAllVisualizations] = useState(false);
   const [visualizationLoading, setVisualizationLoading] = useState(false);
@@ -62,6 +69,7 @@ function App() {
       setHeartRateError("Please select a user");
       setZoneError("Please select a user");
       setSpo2Error("Please select a user");
+      setHrvError("Please select a user");
       return;
     }
 
@@ -71,7 +79,8 @@ function App() {
     await Promise.all([
       fetchHeartRateData(),
       fetchZoneData(),
-      fetchSpO2Data()
+      fetchSpO2Data(),
+      fetchHRVData()
     ]);
 
     setVisualizationLoading(false);
@@ -162,6 +171,40 @@ function App() {
       console.error(err);
     } finally {
       setSpo2Loading(false);
+    }
+  };
+
+  const fetchHRVData = async () => {
+    setHrvLoading(true);
+    setHrvError(null);
+
+    try {
+      const response = await fetchDailyAvgHRVData(selectedUser, startDate, endDate);
+
+      if (response.success) {
+        const processedData = response.data.map(item => ({
+          timestamp: new Date(item.day).getTime(),
+          rmssd: item.avg_rmssd,
+          coverage: item.avg_coverage,
+          hf: item.avg_hf,
+          lf: item.avg_lf
+        })).sort((a, b) => a.timestamp - b.timestamp);
+
+        setHrvData(processedData);
+
+        if (response.warning) {
+          setHrvError(response.warning);
+        } else {
+          setHrvError(null);
+        }
+      } else {
+        setHrvError('Failed to fetch HRV data');
+      }
+    } catch (err) {
+      setHrvError(`Error fetching HRV data: ${err.message}`);
+      console.error(err);
+    } finally {
+      setHrvLoading(false);
     }
   };
 
@@ -282,6 +325,34 @@ function App() {
                 data={spo2Data}
                 loading={spo2Loading}
                 error={spo2Error}
+              />
+            </Paper>
+
+            <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
+              <Typography variant="h5" gutterBottom>
+                Heart Rate Variability (HRV) - RMSSD Trend
+              </Typography>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                RMSSD values over time with 7-day moving average and coverage quality
+              </Typography>
+              <HRVChart
+                data={hrvData}
+                loading={hrvLoading}
+                error={hrvError}
+              />
+            </Paper>
+
+            <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
+              <Typography variant="h5" gutterBottom>
+                Heart Rate Variability (HRV) - Frequency Domain Analysis
+              </Typography>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                High Frequency (HF) vs Low Frequency (LF) power analysis
+              </Typography>
+              <HRVScatterChart
+                data={hrvData}
+                loading={hrvLoading}
+                error={hrvError}
               />
             </Paper>
           </>
