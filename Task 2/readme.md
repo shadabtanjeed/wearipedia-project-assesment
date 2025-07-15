@@ -14,16 +14,16 @@ The system follows a three-tier architecture with clear separation of concerns b
 ```
 ┌───────────────┐     ┌───────────────────┐     ┌────────────────────┐     ┌───────────────┐
 │  Data Source  │     │                   │     │                    │     │   Frontend    │
-│  (Fitbit API/ │────▶│   TimescaleDB     │────▶│  FastAPI Backend   │────▶│   (React)     │
+│  (Fitbit API/ │───▶│   TimescaleDB     │───▶│  FastAPI Backend   │───▶│   (React)     │
 │  Synthetic)   │     │                   │     │                    │     │               │
 └───────────────┘     └───────────────────┘     └────────────────────┘     └───────────────┘
                              │                           │                         │
                              │                           │                         │
                              ▼                           ▼                         ▼
                       ┌─────────────┐           ┌────────────────┐         ┌─────────────────┐
-                      │ Time-series │           │ Data Processing │         │  Visualization  │
-                      │  Data Store │           │ Query Building  │         │     Components  │
-                      │             │           │ API Endpoints   │         │    (Recharts)   │
+                      │ Time-series │           │ Data Processing│         │  Visualization  │
+                      │  Data Store │           │ Query Building │         │     Components  │
+                      │             │           │ API Endpoints  │         │    (Recharts)   │
                       └─────────────┘           └────────────────┘         └─────────────────┘
 ```
 
@@ -102,7 +102,7 @@ It is worth noting that, some of the metrics have millions of datapoints for thi
 6. Frontend renders visualizations based on the returned data
 
 ## Directory Structure
-
+```
 Task 2/
 ├── backend/
 │   ├── app/
@@ -158,7 +158,7 @@ Task 2/
 │       └── Dockerfile            # Frontend container configuration
 ├── docker-compose.yml      # Multi-container orchestration
 └── README.md               # This documentation file
-
+```
 
 ## API Endpoints
 
