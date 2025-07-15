@@ -1,13 +1,14 @@
-from db import get_db_connection
-from datetime import datetime, timezone
-import pytz
-from psycopg2.extras import RealDictCursor
+from datetime import datetime
 from typing import List, Dict, Any
 
-from main import GMT6
+from app.config.timezone import GMT6
+from app.db import get_db_connection
+from psycopg2.extras import RealDictCursor
 
 
-def get_all_azm_data(user_id, start_date, end_date):
+def get_all_azm_data(
+    user_id: int, start_date: datetime, end_date: datetime
+) -> List[Dict[str, Any]]:
     if start_date.tzinfo is None:
         start_date = GMT6.localize(start_date)
     if end_date.tzinfo is None:
@@ -29,13 +30,15 @@ def get_all_azm_data(user_id, start_date, end_date):
                 FROM active_zone_minutes
                 WHERE user_id = %s AND timestamp BETWEEN %s AND %s
                 ORDER BY timestamp
-            """,
+                """,
                 (user_id, start_date, end_date),
             )
             return cursor.fetchall()
 
 
-def get_daily_avg_azm_data(user_id, start_date, end_date):
+def get_daily_avg_azm_data(
+    user_id: int, start_date: datetime, end_date: datetime
+) -> List[Dict[str, Any]]:
     if start_date.tzinfo is None:
         start_date = GMT6.localize(start_date)
     if end_date.tzinfo is None:
@@ -58,7 +61,7 @@ def get_daily_avg_azm_data(user_id, start_date, end_date):
                 WHERE user_id = %s AND timestamp BETWEEN %s AND %s
                 GROUP BY day
                 ORDER BY day
-            """,
+                """,
                 (user_id, start_date, end_date),
             )
             return cursor.fetchall()
