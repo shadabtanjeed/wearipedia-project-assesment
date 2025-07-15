@@ -38,3 +38,9 @@ app.include_router(device_router)
 @app.get("/")
 def read_root():
     return {"message": "Fitbit Data API is running", "version": "1.0.0"}
+
+
+@app.get("/health", tags=["Health"])
+def health_check():
+    """Health check endpoint for container monitoring"""
+    return {"status": "healthy"}

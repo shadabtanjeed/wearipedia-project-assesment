@@ -13,15 +13,24 @@ Knows Issues:
 - For some reason heart rate zone has same data through out the monnth. This is not a problem in data ingestion, rather it is a created due to the manipulation done on synthetically generated data. 
 - In the front end, there are some design fix required, but since having a working front end was the priority, it has been skipped for now.
 - There are some null points present in the data to simulate the real world scenario.
-
+- talk about the MVC structure
 
 To run:
-Start the timescaledb docker from task 1 directory firsr:
+Start the timescaledb docker from task 1 directory first:
+cd "Task 1"
 docker compose up -d timescaledb
 
+To run the backend on local machine:
 cd "Task 2"
 cd backend
+pip install -r requirements.txt
 uvicorn app.main:app --reload
 
 You can view the documentation here:
 http://127.0.0.1:8000/docs
+
+To run the frontend on local machine:
+cd "Task 2"
+cd frontend/fitbit_visualizer
+npm install
+npm start
