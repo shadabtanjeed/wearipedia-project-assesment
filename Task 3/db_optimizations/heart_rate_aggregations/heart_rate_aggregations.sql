@@ -208,8 +208,6 @@ CREATE OR REPLACE FUNCTION refresh_heart_rate_aggregation(
 DECLARE
     start_ts TIMESTAMP;
     end_ts TIMESTAMP;
-    last_refresh_time TIMESTAMP;
-    refresh_needed BOOLEAN;
     result_message TEXT;
 BEGIN
     -- Default date range if not provided
@@ -218,53 +216,31 @@ BEGIN
     ELSE
         start_ts := start_date;
     END IF;
-    
+
     IF end_date IS NULL THEN
         end_ts := NOW();
     ELSE
         end_ts := end_date;
     END IF;
-    
-    -- Check if refresh is needed by comparing with last refresh time
-    SELECT last_refresh INTO last_refresh_time 
-    FROM timescaledb_information.continuous_aggregates 
-    WHERE view_name = 'heart_rate_' || level;
-    
-    -- Skip if already fresh (within 1 hour margin)
-    IF last_refresh_time IS NOT NULL AND last_refresh_time >= end_ts - INTERVAL '1 hour' THEN
-        RETURN 'Aggregation heart_rate_' || level || ' is already up-to-date (last refresh: ' || last_refresh_time || ')';
-    END IF;
-    
+
     result_message := 'To refresh heart_rate_' || level || ' from ' || start_ts || ' to ' || end_ts || ', run these commands in sequence:';
-    
+
     -- Build refresh commands based on level with dependencies
     CASE level
         WHEN '1m' THEN
             result_message := result_message || E'\n1. CALL refresh_continuous_aggregate(''heart_rate_1m'', ''' || start_ts || ''', ''' || end_ts || ''');';
-            
         WHEN '1h' THEN
-            result_message := result_message || E'\n1. CALL refresh_continuous_aggregate(''heart_rate_1m'', ''' || start_ts || ''', ''' || end_ts || ''');' ||
-                            E'\n2. CALL refresh_continuous_aggregate(''heart_rate_1h'', ''' || start_ts || ''', ''' || end_ts || ''');';
-            
+            result_message := result_message || E'\nREFRESH MATERIALIZED VIEW heart_rate_1h;';
         WHEN '1d' THEN
-            result_message := result_message || E'\n1. CALL refresh_continuous_aggregate(''heart_rate_1m'', ''' || start_ts || ''', ''' || end_ts || ''');' ||
-                            E'\n2. CALL refresh_continuous_aggregate(''heart_rate_1h'', ''' || start_ts || ''', ''' || end_ts || ''');' ||
-                            E'\n3. CALL refresh_continuous_aggregate(''heart_rate_1d'', ''' || start_ts || ''', ''' || end_ts || ''');';
-            
+            result_message := result_message || E'\nREFRESH MATERIALIZED VIEW heart_rate_1d;';
         WHEN '1w' THEN
-            result_message := result_message || E'\n1. CALL refresh_continuous_aggregate(''heart_rate_1h'', ''' || start_ts || ''', ''' || end_ts || ''');' ||
-                            E'\n2. CALL refresh_continuous_aggregate(''heart_rate_1d'', ''' || start_ts || ''', ''' || end_ts || ''');' ||
-                            E'\n3. CALL refresh_continuous_aggregate(''heart_rate_1w'', ''' || start_ts || ''', ''' || end_ts || ''');';
-            
+            result_message := result_message || E'\nREFRESH MATERIALIZED VIEW heart_rate_1w;';
         WHEN '1mo' THEN
-            result_message := result_message || E'\n1. CALL refresh_continuous_aggregate(''heart_rate_1d'', ''' || start_ts || ''', ''' || end_ts || ''');' ||
-                            E'\n2. CALL refresh_continuous_aggregate(''heart_rate_1w'', ''' || start_ts || ''', ''' || end_ts || ''');' ||
-                            E'\n3. CALL refresh_continuous_aggregate(''heart_rate_1mo'', ''' || start_ts || ''', ''' || end_ts || ''');';
-            
+            result_message := result_message || E'\nREFRESH MATERIALIZED VIEW heart_rate_1mo;';
         ELSE
             RETURN 'Invalid aggregation level. Use 1m, 1h, 1d, 1w, or 1mo.';
     END CASE;
-    
+
     RETURN result_message;
 END;
 $$ LANGUAGE PLPGSQL;
@@ -344,5 +320,4 @@ BEGIN
 END;
 $$ LANGUAGE PLPGSQL;
 
--- Execute the creation of aggregations automatically if desired
 -- SELECT create_heart_rate_aggregations();
