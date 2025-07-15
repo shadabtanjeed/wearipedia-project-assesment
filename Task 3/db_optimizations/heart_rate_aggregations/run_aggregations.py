@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# filepath: /home/shadab/Desktop/Github Repos/wearipedia-project-assesment/Task 3/db_optimizations/run_aggregations.py
-
 import argparse
 import datetime
 import sys
@@ -63,14 +60,14 @@ def execute_refresh(conn, level, start_date=None, end_date=None):
                 (level, start_date, end_date)
             )
             instructions = cursor.fetchone()[0]
-            print(f"Instructions returned:\n{instructions}\n")  # Debug print
+            print(f"Instructions returned:\n{instructions}\n")
 
             # Parse the instructions to get the actual refresh commands
             commands = [
                 line.strip() for line in instructions.split('\n')
                 if line.strip().startswith('CALL') or line.strip().startswith('REFRESH')
             ]
-            print(f"Commands to execute: {commands}")  # Debug print
+            print(f"Commands to execute: {commands}") 
 
             # Execute each refresh command in order
             for cmd in commands:

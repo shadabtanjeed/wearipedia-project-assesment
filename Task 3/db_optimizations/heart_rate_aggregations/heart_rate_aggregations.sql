@@ -200,7 +200,6 @@ END;
 $$ LANGUAGE PLPGSQL;
 
 -- Function to refresh a specific aggregation level with intelligent dependency management
--- Function to refresh a specific aggregation level with intelligent dependency management
 CREATE OR REPLACE FUNCTION refresh_heart_rate_aggregation(
     level TEXT,
     start_date TIMESTAMP DEFAULT NULL,
@@ -321,5 +320,4 @@ BEGIN
 END;
 $$ LANGUAGE PLPGSQL;
 
--- Execute the creation of aggregations automatically if desired
 -- SELECT create_heart_rate_aggregations();
