@@ -7,6 +7,7 @@
 Knows Issues:
 - For some reason heart rate zone has same data through out the monnth. This is not a problem in data ingestion, rather it is a created due to the manipulation done on synthetically generated data. 
 - In the front end, there are some design fix required, but since having a working front end was the priority, it has been skipped for now.
+- There are some null points present in the data to simulate the real world scenario.
 
 
 To run:

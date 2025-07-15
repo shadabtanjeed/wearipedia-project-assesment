@@ -9,12 +9,15 @@ import HRVChart from './components/HRVChart';
 import HRVScatterChart from './components/HRVScatterChart';
 import BreathingRateChart from './components/BreathingRateChart';
 import BreathingRateBarChart from './components/BreathingRateBarChart';
+import AZMStackedChart from './components/AZMStackedChart';
+import AZMLineChart from './components/AZMLineChart';
 import { API_URL } from './services/api';
 import { fetchUsers } from './services/users_api';
 import { fetchDailyAvgHeartRateData, fetchHeartRateZonesData } from './services/heartRate_api';
 import { fetchDailyAvgSpO2Data } from './services/spo2_api';
 import { fetchDailyAvgHRVData } from './services/hrv_api';
 import { fetchAllBreathingRateData } from './services/breathingRate_api';
+import { fetchDailyAvgAZMData } from './services/azm_api';
 import './App.css';
 
 function App() {
@@ -44,6 +47,10 @@ function App() {
   const [breathingRateData, setBreathingRateData] = useState([]);
   const [breathingRateLoading, setBreathingRateLoading] = useState(false);
   const [breathingRateError, setBreathingRateError] = useState(null);
+
+  const [azmData, setAzmData] = useState([]);
+  const [azmLoading, setAzmLoading] = useState(false);
+  const [azmError, setAzmError] = useState(null);
 
   const [showAllVisualizations, setShowAllVisualizations] = useState(false);
   const [visualizationLoading, setVisualizationLoading] = useState(false);
@@ -78,6 +85,7 @@ function App() {
       setSpo2Error("Please select a user");
       setHrvError("Please select a user");
       setBreathingRateError("Please select a user");
+      setAzmError("Please select a user");
       return;
     }
 
@@ -89,7 +97,8 @@ function App() {
       fetchZoneData(),
       fetchSpO2Data(),
       fetchHRVData(),
-      fetchBreathingRateData()
+      fetchBreathingRateData(),
+      fetchAZMData()
     ]);
 
     setVisualizationLoading(false);
@@ -248,6 +257,40 @@ function App() {
       console.error(err);
     } finally {
       setBreathingRateLoading(false);
+    }
+  };
+
+  const fetchAZMData = async () => {
+    setAzmLoading(true);
+    setAzmError(null);
+
+    try {
+      const response = await fetchDailyAvgAZMData(selectedUser, startDate, endDate);
+
+      if (response.success) {
+        const processedData = response.data.map(item => ({
+          timestamp: new Date(item.day).getTime(),
+          fat_burn: item.avg_fat_burn_minutes,
+          cardio: item.avg_cardio_minutes,
+          peak: item.avg_peak_minutes,
+          total_azm: item.avg_active_zone_minutes
+        })).sort((a, b) => a.timestamp - b.timestamp);
+
+        setAzmData(processedData);
+
+        if (response.warning) {
+          setAzmError(response.warning);
+        } else {
+          setAzmError(null);
+        }
+      } else {
+        setAzmError('Failed to fetch AZM data');
+      }
+    } catch (err) {
+      setAzmError(`Error fetching AZM data: ${err.message}`);
+      console.error(err);
+    } finally {
+      setAzmLoading(false);
     }
   };
 
@@ -424,6 +467,34 @@ function App() {
                 data={breathingRateData}
                 loading={breathingRateLoading}
                 error={breathingRateError}
+              />
+            </Paper>
+
+            <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
+              <Typography variant="h5" gutterBottom>
+                Active Zone Minutes - Stacked Distribution
+              </Typography>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Daily breakdown of minutes spent in different heart rate zones
+              </Typography>
+              <AZMStackedChart
+                data={azmData}
+                loading={azmLoading}
+                error={azmError}
+              />
+            </Paper>
+
+            <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
+              <Typography variant="h5" gutterBottom>
+                Active Zone Minutes - Trend Analysis
+              </Typography>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Trends in active zone minutes across different intensity levels
+              </Typography>
+              <AZMLineChart
+                data={azmData}
+                loading={azmLoading}
+                error={azmError}
               />
             </Paper>
           </>
