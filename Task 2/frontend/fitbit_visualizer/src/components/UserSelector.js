@@ -15,7 +15,7 @@ const UserSelector = ({ users, selectedUser, onChange, isLoading }) => {
                 >
                     {users.map((user) => (
                         <MenuItem key={user.user_id} value={user.user_id}>
-                            User {user.user_id} - {user.name}
+                            User ID: {user.user_id} - {user.name}
                         </MenuItem>
                     ))}
                 </Select>

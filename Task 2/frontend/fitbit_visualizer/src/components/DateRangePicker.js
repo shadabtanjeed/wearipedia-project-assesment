@@ -7,6 +7,8 @@ const DateRangePicker = ({ startDate, endDate, onStartDateChange, onEndDateChang
     const maxDate = '2024-01-31';
 
     const validateDate = (date) => {
+        if (!date) return true;
+
         const selectedDate = new Date(date);
         const minDateTime = new Date(minDate);
         const maxDateTime = new Date(maxDate);
@@ -37,7 +39,7 @@ const DateRangePicker = ({ startDate, endDate, onStartDateChange, onEndDateChang
             <TextField
                 label="Start Date"
                 type="date"
-                value={startDate}
+                value={startDate || ''}
                 onChange={handleStartDateChange}
                 InputLabelProps={{ shrink: true }}
                 inputProps={{ min: minDate, max: maxDate }}
@@ -46,7 +48,7 @@ const DateRangePicker = ({ startDate, endDate, onStartDateChange, onEndDateChang
             <TextField
                 label="End Date"
                 type="date"
-                value={endDate}
+                value={endDate || ''}
                 onChange={handleEndDateChange}
                 InputLabelProps={{ shrink: true }}
                 inputProps={{ min: minDate, max: maxDate }}

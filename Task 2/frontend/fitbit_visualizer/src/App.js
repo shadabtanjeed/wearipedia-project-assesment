@@ -44,7 +44,7 @@ function App() {
           Health Data Monitor
         </Typography>
         <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 3 }}>
-          Connected to backend: {API_URL}
+          Connected to backend: {API_URL} (For experimental purposes)
         </Typography>
 
         {error && (
