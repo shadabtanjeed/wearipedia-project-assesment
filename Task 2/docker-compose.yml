@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+
+  # FastAPI Backend service
+  backend:
+    build: ./backend
+    container_name: fitbit_backend
+    restart: always
+    environment:
+      - DB_HOST=host.docker.internal
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=password
+      - DB_NAME=fitbit_data
+    ports:
+      - "8000:8000"
+    networks:
+      - fitbit_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # React Frontend service with Nginx
+  frontend:
+    build: ./frontend/fitbit_visualizer
+    container_name: fitbit_frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks:
+      - fitbit_network
+
+networks:
+  fitbit_network:
+    driver: bridge

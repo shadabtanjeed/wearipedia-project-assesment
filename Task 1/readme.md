@@ -6,7 +6,7 @@ This project implements a daily, delta-load pipeline for ingesting Fitbit health
 
 The pipeline is designed to work with synthetic data files generated in Task 0b, simulating Fitbit health metrics for two users. 
 
-Due to memory limitations on my local machine, I was able to ingest approximately 15 days worth of data. The ingestion process is technically sound, but handling larger volumes would require more resources or further optimization.
+Due to memory limitations on my local machine, I was able to ingest approximately 20 days worth of data. The ingestion process is technically sound, but handling larger volumes would require more resources or further optimization.
 
 ---
 
@@ -133,26 +133,26 @@ wearipedia-project-assesment/
 3. Build and run containers:
    ```sh
    cd Task\ 1
-   docker-compose up -d
+   docker compose up -d
    ```
 
 ### Operation Modes
 
 - **Normal (daily cron, run once each day to retrieve data of one day only starting from 01-01-2024 or last run timestamp):**
   ```sh
-  docker-compose up -d
+  docker compose up -d
   ```
 - **Test (2-min intervals; run with 2 mins interval, each time retrive data just like in Normal mode.):**
   ```sh
-  TEST_MODE=true docker-compose up -d
+  TEST_MODE=true docker compose up -d
   ```
 - **Catch-up (retrieve all data at once up to 2024-01-30):**
   ```sh
-  CATCH_UP_MODE=true docker-compose up -d
+  CATCH_UP_MODE=true docker compose up -d
   ```
 - **Reset (clear all data stored into db and run Normal mode):**
   ```sh
-  RESET_MODE=true docker-compose up -d
+  RESET_MODE=true docker compose up -d
   ```
 
 ---
@@ -163,27 +163,27 @@ wearipedia-project-assesment/
 
 - Process specific user:
   ```sh
-  docker-compose exec ingestion python ingestions.py --user-id 1
+  docker compose exec ingestion python ingestions.py --user-id 1
   ```
 - Process specific metric:
   ```sh
-  docker-compose exec ingestion python ingestions.py --metric-type heart_rate
+  docker compose exec ingestion python ingestions.py --metric-type heart_rate
   ```
 - Debug logging:
   ```sh
-  docker-compose exec ingestion python ingestions.py --debug
+  docker compose exec ingestion python ingestions.py --debug
   ```
 - Reset timestamps:
   ```sh
-  docker-compose exec ingestion python ingestions.py --reset-timestamps
+  docker compose exec ingestion python ingestions.py --reset-timestamps
   ```
 - Single day processing:
   ```sh
-  docker-compose exec ingestion python ingestions.py --single-day
+  docker compose exec ingestion python ingestions.py --single-day
   ```
 - Check file mappings:
   ```sh
-  docker-compose exec ingestion python ingestions.py --check-files
+  docker compose exec ingestion python ingestions.py --check-files
   ```
 
 ### Timestamp Tracking
@@ -198,11 +198,11 @@ wearipedia-project-assesment/
 
 - Run DB container:
   ```sh
-  docker-compose up -d timescaledb
+  docker compose up -d timescaledb
   ```
 - Connect:
   ```sh
-  docker-compose exec timescaledb psql -U postgres -d fitbit_data
+  docker compose exec timescaledb psql -U postgres -d fitbit_data
   ```
 
 ---
@@ -345,7 +345,7 @@ class GarminHeartRate(MetricBase):
 Specify the new source type via CLI or environment variable:
 
 ```sh
-SOURCE_TYPE=garmin docker-compose up -d
+SOURCE_TYPE=garmin docker compose up -d
 ```
 
 ### 4. Add Database Schema
@@ -366,7 +366,7 @@ CREATE TABLE IF NOT EXISTS GARMIN_HEART_RATE (
 ## Limitations
 - While running the docker compose as TEST or CATCH UP Mode, every time you run it, it will not start from the last timestamp but from the beginning of the data and create duplicates. I found this issue at the last stage and will get back to it later.
 
-- Due to memory constraints, I was able to ingest only around 15 days of data. For larger datasets, you may need to optimize the pipeline or use a machine with more resources.
+- Due to memory constraints, I was able to ingest only around 20 days of data. For larger datasets, you may need to optimize the pipeline or use a machine with more resources.
 
 - The normal mode works fine and will not create duplicates.
 
