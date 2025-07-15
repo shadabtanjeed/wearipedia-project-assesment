@@ -11,6 +11,8 @@ from source_adapter import SourceAdapterFactory
 from models import HealthMetricFactory
 from db_operations import DBOperations
 
+import psycopg2
+
 # Configure more detailed logging
 logging.basicConfig(
     level=logging.DEBUG,
@@ -81,6 +83,49 @@ def initialize_database(db_conn):
         db_conn.conn.rollback()
         return False
 
+def refresh_aggregates_for_metric(db, metric_type, start_date, end_date, levels=None):
+    """Refresh aggregates with special handling for continuous aggregates"""
+    if not db or not hasattr(db, 'conn'):
+        logger.error("Invalid DB connection")
+        raise ValueError("Valid DB connection required")
+
+    start_dt = convert_to_utc(start_date)
+    end_dt = convert_to_utc(end_date)
+    
+    metric_levels = {
+        "heart_rate": ["1m", "1h", "1d", "1w", "1mo"],
+        # ... other metrics ...
+    }
+    levels = levels or metric_levels.get(metric_type, [])
+
+    try:
+        # Handle continuous aggregate separately (needs autocommit)
+        if "1m" in levels and metric_type == "heart_rate":
+            logger.debug("Refreshing continuous aggregate (special handling)")
+            with db.conn.cursor() as cursor:
+                # Ensure autocommit is enabled for this operation
+                db.conn.autocommit = True
+                cursor.execute(
+                    "CALL refresh_continuous_aggregate('heart_rate_1m', %s, %s)",
+                    (start_dt, end_dt)
+                )
+                logger.info("Successfully refreshed heart_rate_1m")
+                db.conn.autocommit = False  # Reset to original state
+
+        # Handle materialized views in a transaction
+        other_levels = [l for l in levels if l != "1m"]
+        if other_levels:
+            with db.conn.cursor() as cursor:
+                for level in other_levels:
+                    logger.debug(f"Refreshing materialized view heart_rate_{level}")
+                    cursor.execute(f"REFRESH MATERIALIZED VIEW heart_rate_{level}")
+                db.conn.commit()
+                logger.info(f"Refreshed materialized views: {other_levels}")
+
+    except Exception as e:
+        logger.error(f"Refresh failed: {e}")
+        db.conn.rollback()
+        raise
 
 # Add UTC conversion utilities
 def convert_to_utc(timestamp_input) -> datetime:
@@ -388,6 +433,7 @@ def process_metrics(
         logger.info(
             f"Successfully processed {total_records} flattened records for {metric_type}"
         )
+        refresh_aggregates_for_metric(db, metric_type, start_date, end_date)
 
     except Exception as e:
         logger.error(f"Error during {metric_type} processing: {e}")
@@ -629,9 +675,9 @@ def main():
 
                 if current_date <= end_date:
                     logger.info(
-                        f"Test run complete. Sleeping for 2 minutes before processing {current_date.date()}..."
+                        f"Test run complete. Sleeping for 10 seconds before processing {current_date.date()}..."
                     )
-                    time.sleep(120)  # Sleep for 2 minutes
+                    time.sleep(10)  # Sleep for 10 seconds
                 else:
                     logger.info("Test mode complete - reached end date")
 

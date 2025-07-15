@@ -9,6 +9,8 @@ For this project, I focused on heart rate data, but the same approach can be use
 
 - This task is based on the same TimeScaleDB database used in Task 2 and Task 1, sit is recommended to do the same.
 
+- This task contains the ingestion pipeline, which is basically modified version of Task 1 that also aggregates data during ingestion. You can run Docker image to run the ingestion pipeline, which will automatically aggregate heart rate data into the appropriate views.
+
 ## How Data Aggregation Works
 
 There are two main files:
@@ -112,3 +114,49 @@ SELECT get_optimal_heart_rate_table('2024-01-01', '2025-01-01');           -- Re
 ```
 
 You can use any SQL client to run these queries.
+
+## How to Run the Modified Ingestion Pipeline
+
+The ingestion pipeline from Task 1 has been updated to aggregate heart rate data during ingestion. As new data arrives, it is automatically aggregated into the relevant views.
+
+### Steps:
+
+1. **Stop Existing Docker Containers**
+
+    ```bash
+    cd "Task 1"
+    docker compose down
+    ```
+
+2. **Build the Docker Image for the Modified Ingestion Pipeline**
+
+    ```bash
+    cd "Task 3/modified_ingestion"
+    docker build --no-cache .
+    ```
+
+3. **Apply the Aggregation SQL Script to the Database**
+
+    From the `Task 3/modified_ingestion` directory:
+
+    ```bash
+    docker compose exec -T timescaledb psql -U postgres -d fitbit_data < "../db_optimizations/heart_rate_aggregations/heart_rate_aggregations.sql"
+    ```
+
+4. **Run the Python Aggregation Setup**
+
+    *(Add your specific command here if needed, e.g., `python run_aggregations.py --setup`)*
+
+5. **Start the Modified Ingestion Pipeline**
+
+    From the `Task 3/modified_ingestion` directory:
+
+    ```bash
+    docker compose up --remove-orphans
+    ```
+
+    To run in test mode:
+
+    ```bash
+    TEST_MODE=true docker compose up --remove-orphans
+    ```

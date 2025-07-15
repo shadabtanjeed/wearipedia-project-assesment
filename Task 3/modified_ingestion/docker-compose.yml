@@ -3,7 +3,7 @@ version: '3.8'
 services:
   timescaledb:
     image: timescale/timescaledb:latest-pg17
-    container_name: task1-timescaledb
+    container_name: task3-timescaledb
     restart: unless-stopped
     environment:
       - POSTGRES_USER=postgres
@@ -26,7 +26,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: task1-ingestion
+    container_name: task3-modified-ingestion
     environment:
       - DB_HOST=timescaledb
       - DB_PORT=5432
