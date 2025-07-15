@@ -145,8 +145,10 @@ The ingestion pipeline from Task 1 has been updated to aggregate heart rate data
 
 4. **Run the Python Aggregation Setup**
 
-    *(Add your specific command here if needed, e.g., `python run_aggregations.py --setup`)*
-
+    ```bash
+    cd "Task 3/db_optimizations/heart_rate_aggregations"
+    python run_aggregations.py --setup
+    ```
 5. **Start the Modified Ingestion Pipeline**
 
     From the `Task 3/modified_ingestion` directory:
