@@ -1,11 +1,8 @@
 from fastapi import Query, HTTPException
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from typing import Optional, Tuple
 
 from app.config.timezone import GMT6
-
-
-# Parse and validate date parameters for API requests
 
 
 def parse_date_parameters(
@@ -13,20 +10,29 @@ def parse_date_parameters(
     start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
 ) -> Tuple[int, datetime, datetime]:
+    """Parse and validate date parameters for API requests"""
     try:
         if end_date is None:
             end_date_parsed = datetime.strptime("2024-01-30", "%Y-%m-%d")
-            end_date_parsed = GMT6.localize(end_date_parsed)
+            end_date_parsed = GMT6.localize(
+                end_date_parsed.replace(hour=23, minute=59, second=59)
+            )
         else:
             end_date_parsed = datetime.strptime(end_date, "%Y-%m-%d")
-            end_date_parsed = GMT6.localize(end_date_parsed)
+            end_date_parsed = GMT6.localize(
+                end_date_parsed.replace(hour=23, minute=59, second=59)
+            )
 
         if start_date is None:
             start_date_parsed = datetime.strptime("2024-01-01", "%Y-%m-%d")
-            start_date_parsed = GMT6.localize(start_date_parsed)
+            start_date_parsed = GMT6.localize(
+                start_date_parsed.replace(hour=0, minute=0, second=0)
+            )
         else:
             start_date_parsed = datetime.strptime(start_date, "%Y-%m-%d")
-            start_date_parsed = GMT6.localize(start_date_parsed)
+            start_date_parsed = GMT6.localize(
+                start_date_parsed.replace(hour=0, minute=0, second=0)
+            )
 
         return user_id, start_date_parsed, end_date_parsed
     except ValueError as e:
