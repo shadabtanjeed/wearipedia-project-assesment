@@ -1,3 +1,8 @@
+- give a architecture diagram of the task. from the data ingestion to to the front end. Use visuals.
+
+
+
+
 - In the config file, there is a variable called GMT6, which is used in all other api endpoints. Initially the db was storing the date in GMT6, but now it is storing in UTC. This variable is not used anymore, but I have kept it for future use if needed.
 - Talk about why using  SQL query instead of ORM
 - List the fallback mechanism used in this task

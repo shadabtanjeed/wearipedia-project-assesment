@@ -11,6 +11,8 @@ import BreathingRateChart from './components/BreathingRateChart';
 import BreathingRateBarChart from './components/BreathingRateBarChart';
 import AZMStackedChart from './components/AZMStackedChart';
 import AZMLineChart from './components/AZMLineChart';
+import ActivityLineChart from './components/ActivityLineChart';
+import ActivityBarChart from './components/ActivityBarChart';
 import { API_URL } from './services/api';
 import { fetchUsers } from './services/users_api';
 import { fetchDailyAvgHeartRateData, fetchHeartRateZonesData } from './services/heartRate_api';
@@ -18,6 +20,7 @@ import { fetchDailyAvgSpO2Data } from './services/spo2_api';
 import { fetchDailyAvgHRVData } from './services/hrv_api';
 import { fetchAllBreathingRateData } from './services/breathingRate_api';
 import { fetchDailyAvgAZMData } from './services/azm_api';
+import { fetchAllActivityData } from './services/activity_api';
 import './App.css';
 
 function App() {
@@ -51,6 +54,10 @@ function App() {
   const [azmData, setAzmData] = useState([]);
   const [azmLoading, setAzmLoading] = useState(false);
   const [azmError, setAzmError] = useState(null);
+
+  const [activityData, setActivityData] = useState([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState(null);
 
   const [showAllVisualizations, setShowAllVisualizations] = useState(false);
   const [visualizationLoading, setVisualizationLoading] = useState(false);
@@ -86,6 +93,7 @@ function App() {
       setHrvError("Please select a user");
       setBreathingRateError("Please select a user");
       setAzmError("Please select a user");
+      setActivityError("Please select a user");
       return;
     }
 
@@ -98,7 +106,8 @@ function App() {
       fetchSpO2Data(),
       fetchHRVData(),
       fetchBreathingRateData(),
-      fetchAZMData()
+      fetchAZMData(),
+      fetchActivityData()
     ]);
 
     setVisualizationLoading(false);
@@ -294,6 +303,37 @@ function App() {
     }
   };
 
+  const fetchActivityData = async () => {
+    setActivityLoading(true);
+    setActivityError(null);
+
+    try {
+      const response = await fetchAllActivityData(selectedUser, startDate, endDate);
+
+      if (response.success) {
+        const processedData = response.data.map(item => ({
+          timestamp: new Date(item.timestamp).getTime(),
+          steps: item.value
+        })).sort((a, b) => a.timestamp - b.timestamp);
+
+        setActivityData(processedData);
+
+        if (response.warning) {
+          setActivityError(response.warning);
+        } else {
+          setActivityError(null);
+        }
+      } else {
+        setActivityError('Failed to fetch activity data');
+      }
+    } catch (err) {
+      setActivityError(`Error fetching activity data: ${err.message}`);
+      console.error(err);
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
   return (
     <Container maxWidth="lg">
       <Box sx={{ my: 4, textAlign: 'center' }}>
@@ -372,6 +412,8 @@ function App() {
 
         {showAllVisualizations && (
           <>
+
+
             <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
               <Typography variant="h5" gutterBottom>
                 Heart Rate Analysis
@@ -495,6 +537,34 @@ function App() {
                 data={azmData}
                 loading={azmLoading}
                 error={azmError}
+              />
+            </Paper>
+
+            <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
+              <Typography variant="h5" gutterBottom>
+                Daily Activity - Step Count Trends
+              </Typography>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Daily step count with 7-day moving average and activity level indicators
+              </Typography>
+              <ActivityLineChart
+                data={activityData}
+                loading={activityLoading}
+                error={activityError}
+              />
+            </Paper>
+
+            <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
+              <Typography variant="h5" gutterBottom>
+                Daily Activity - Step Count Distribution
+              </Typography>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Daily step count with color-coded activity levels
+              </Typography>
+              <ActivityBarChart
+                data={activityData}
+                loading={activityLoading}
+                error={activityError}
               />
             </Paper>
           </>
