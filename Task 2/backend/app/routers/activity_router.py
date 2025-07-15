@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Tuple
 from datetime import datetime
+import logging
 
 from app.controllers.activity_controller import (
     get_all_activity_data,
@@ -8,6 +9,7 @@ from app.controllers.activity_controller import (
 from app.utils.date_parser import parse_date_parameters
 
 router = APIRouter(prefix="/api/activity", tags=["Activity"])
+logger = logging.getLogger("app")
 
 
 @router.get("/get_all_activity_data")
@@ -18,7 +20,16 @@ async def api_get_all_activity_data(
 
     try:
         data = get_all_activity_data(user_id, start_date, end_date)
-        return {
+
+        fallback_used = False
+        warning_message = None
+
+        if not data:
+            warning_message = (
+                f"No activity data found for user {user_id} in the specified time range"
+            )
+
+        response = {
             "success": True,
             "parameters": {
                 "user_id": user_id,
@@ -28,7 +39,23 @@ async def api_get_all_activity_data(
             "data_count": len(data),
             "data": data,
         }
+
+        if warning_message:
+            response["warning"] = warning_message
+
+        if fallback_used:
+            response["fallback_used"] = True
+
+        return response
+    except ValueError as e:
+        if "User" in str(e) and "does not exist" in str(e):
+            raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        import traceback
+
+        logger.error(f"Error in api_get_all_activity_data: {traceback.format_exc()}")
         raise HTTPException(
-            status_code=500, detail=f"Error fetching activity data: {str(e)}"
+            status_code=500,
+            detail="An error occurred while fetching activity data. Please try again later.",
         )

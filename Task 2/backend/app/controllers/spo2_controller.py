@@ -1,9 +1,12 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Any
+import logging
 
 from app.config.timezone import GMT6
 from app.db import get_db_connection
 from psycopg2.extras import RealDictCursor
+
+logger = logging.getLogger("app")
 
 
 def get_all_spo2_data(
@@ -14,24 +17,69 @@ def get_all_spo2_data(
     if end_date.tzinfo is None:
         end_date = GMT6.localize(end_date)
 
-    with get_db_connection() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute("SET TIME ZONE '+06:00'")
+    conn = None
+    cursor = None
 
-        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            cursor.execute(
-                """
-                SELECT 
-                    timestamp,
-                    value
-                FROM spo2
-                WHERE user_id = %s AND timestamp BETWEEN %s AND %s
-                ORDER BY timestamp
-                """,
-                (user_id, start_date, end_date),
+    try:
+        conn = get_db_connection()
+        cursor = None
+
+        # Set timezone for this connection
+        with conn.cursor() as tz_cursor:
+            tz_cursor.execute("SET TIME ZONE '+06:00'")
+
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Try to get data for requested period
+        query = """
+        SELECT 
+            timestamp,
+            value
+        FROM spo2
+        WHERE user_id = %s AND timestamp BETWEEN %s AND %s
+        ORDER BY timestamp
+        """
+        cursor.execute(query, (user_id, start_date, end_date))
+        results = cursor.fetchall()
+
+        # Fallback mechanism starts here
+        if not results:
+            logger.info(
+                f"No SpO2 data for user {user_id} between {start_date} and {end_date}. Trying fallback."
             )
+            fallback_query = """
+            SELECT 
+                timestamp,
+                value
+            FROM spo2
+            WHERE user_id = %s AND timestamp <= %s
+            ORDER BY timestamp DESC
+            LIMIT 100
+            """
+            cursor.execute(fallback_query, (user_id, end_date))
             results = cursor.fetchall()
-            return results
+
+            if not results:
+                user_check_query = "SELECT user_id FROM USERS WHERE user_id = %s"
+                cursor.execute(user_check_query, (user_id,))
+                user_exists = cursor.fetchone()
+
+                if not user_exists:
+                    raise ValueError(f"User {user_id} does not exist")
+                else:
+                    logger.warning(f"User {user_id} exists but has no SpO2 data")
+                    return []
+
+        return results
+
+    except Exception as e:
+        logger.error(f"Database error in get_all_spo2_data: {str(e)}")
+        return []
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 def get_daily_avg_spo2_data(
@@ -42,24 +90,63 @@ def get_daily_avg_spo2_data(
     if end_date.tzinfo is None:
         end_date = GMT6.localize(end_date)
 
-    with get_db_connection() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute("SET TIME ZONE '+06:00'")
+    conn = None
+    cursor = None
 
-        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            cursor.execute(
-                """
-                SELECT 
-                    date_trunc('day', timestamp) AT TIME ZONE '+06:00' AS day, 
-                    AVG(value) AS avg_spo2,
-                    MIN(value) AS min_spo2,
-                    MAX(value) AS max_spo2
-                FROM spo2
-                WHERE user_id = %s AND timestamp BETWEEN %s AND %s
-                GROUP BY day
-                ORDER BY day
-                """,
-                (user_id, start_date, end_date),
+    try:
+        conn = get_db_connection()
+        cursor = None
+
+        # Set timezone for this connection
+        with conn.cursor() as tz_cursor:
+            tz_cursor.execute("SET TIME ZONE '+06:00'")
+
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Try to get data for requested period
+        query = """
+        SELECT 
+            date_trunc('day', timestamp) AT TIME ZONE '+06:00' AS day, 
+            AVG(value) AS avg_spo2
+        FROM spo2
+        WHERE user_id = %s AND timestamp BETWEEN %s AND %s
+        GROUP BY day
+        ORDER BY day
+        """
+        cursor.execute(query, (user_id, start_date, end_date))
+        results = cursor.fetchall()
+
+        # Fallback mechanism starts here
+        if not results:
+            logger.info(
+                f"No daily avg SpO2 data for user {user_id} between {start_date} and {end_date}. Trying wider range fallback."
             )
+            extended_start = start_date - timedelta(days=7)
+            extended_end = end_date + timedelta(days=7)
+
+            cursor.execute(query, (user_id, extended_start, extended_end))
             results = cursor.fetchall()
-            return results
+
+            if not results:
+                user_check_query = "SELECT user_id FROM USERS WHERE user_id = %s"
+                cursor.execute(user_check_query, (user_id,))
+                user_exists = cursor.fetchone()
+
+                if not user_exists:
+                    raise ValueError(f"User {user_id} does not exist")
+                else:
+                    logger.warning(
+                        f"User {user_id} exists but has no daily average SpO2 data"
+                    )
+                    return []
+
+        return results
+
+    except Exception as e:
+        logger.error(f"Database error in get_daily_avg_spo2_data: {str(e)}")
+        return []
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()

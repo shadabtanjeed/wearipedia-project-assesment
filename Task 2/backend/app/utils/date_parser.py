@@ -11,6 +11,10 @@ def parse_date_parameters(
     end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
 ) -> Tuple[int, datetime, datetime]:
     """Parse and validate date parameters for API requests"""
+
+    if user_id <= 0 or None:
+        user_id = 1
+
     try:
         if end_date is None:
             end_date_parsed = datetime.strptime("2024-01-30", "%Y-%m-%d")
