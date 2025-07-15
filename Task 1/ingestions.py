@@ -82,6 +82,40 @@ def initialize_database(db_conn):
         return False
 
 
+# Add UTC conversion utilities
+def convert_to_utc(timestamp_input) -> datetime:
+    """Convert timestamp to UTC datetime (timezone-naive for database storage)"""
+    try:
+        # Handle different input types
+        if isinstance(timestamp_input, str):
+            # Parse string timestamp
+            if "T" in timestamp_input:
+                # ISO format: "2024-01-01T00:00:00" or "2024-01-01T00:00:00.000"
+                if "." in timestamp_input:
+                    dt = datetime.fromisoformat(timestamp_input.replace(".000", ""))
+                else:
+                    dt = datetime.fromisoformat(timestamp_input)
+            else:
+                # Date only format: "2024-01-01"
+                dt = datetime.strptime(timestamp_input, "%Y-%m-%d")
+        elif isinstance(timestamp_input, datetime):
+            dt = timestamp_input
+        else:
+            logger.error(f"Unsupported timestamp type: {type(timestamp_input)}")
+            return None
+
+        # If timezone-naive, assume it's UTC (since synthetic data is UTC)
+        if dt.tzinfo is None:
+            # Return as timezone-naive UTC for database storage
+            return dt
+
+        # Convert to UTC and remove timezone info for storage
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    except Exception as e:
+        logger.error(f"Error converting timestamp {timestamp_input} to UTC: {e}")
+        return None
+
+
 # Add debugging function
 def debug_data(msg, data, truncate=True):
     """Log data for debugging purposes with option to truncate for readability"""
@@ -108,14 +142,8 @@ def read_last_timestamp(metric_type: str, user_id: str = "1") -> Optional[dateti
             with open(timestamp_file, "r") as f:
                 timestamp_str = f.read().strip()
                 if timestamp_str:
-                    # Convert to offset-aware datetime if timezone info is present
-                    if "+" in timestamp_str or "Z" in timestamp_str:
-                        file_timestamp = datetime.fromisoformat(
-                            timestamp_str.replace("Z", "+00:00")
-                        )
-                    else:
-                        # Create timezone-naive datetime
-                        file_timestamp = datetime.fromisoformat(timestamp_str)
+                    # Convert to UTC timezone-naive datetime
+                    file_timestamp = convert_to_utc(timestamp_str)
                     logger.info(
                         f"Read timestamp from file {timestamp_file}: {file_timestamp}"
                     )
@@ -131,50 +159,48 @@ def read_last_timestamp(metric_type: str, user_id: str = "1") -> Optional[dateti
                 logger.info(
                     f"Read timestamp from database for {metric_type}: {db_timestamp}"
                 )
-                # Make db_timestamp timezone-naive if it's timezone-aware for consistent comparison
+                # Ensure it's timezone-naive UTC
                 if db_timestamp.tzinfo is not None:
-                    db_timestamp = db_timestamp.replace(tzinfo=None)
+                    db_timestamp = db_timestamp.astimezone(timezone.utc).replace(
+                        tzinfo=None
+                    )
 
             # Use the later timestamp if both exist
             if file_timestamp and db_timestamp:
-                # Make file_timestamp timezone-naive if it's timezone-aware
-                if file_timestamp.tzinfo is not None:
-                    file_timestamp = file_timestamp.replace(tzinfo=None)
                 return max(file_timestamp, db_timestamp)
             elif file_timestamp:
-                # Make file_timestamp timezone-naive if it's timezone-aware
-                if file_timestamp.tzinfo is not None:
-                    file_timestamp = file_timestamp.replace(tzinfo=None)
                 return file_timestamp
             elif db_timestamp:
                 return db_timestamp
             else:
-                # Default to start of synthetic data range - FIXED DATE
-                default_start = datetime(2024, 1, 1, tzinfo=None)
+                # Default to start of synthetic data range as UTC
+                default_start = datetime(2024, 1, 1)  # Already timezone-naive UTC
                 logger.info(
                     f"No existing timestamp found, using default: {default_start}"
                 )
                 return default_start
     except Exception as e:
         logger.error(f"Error reading timestamp from database: {e}")
-        # Also return 2024-01-01 as fallback
-        return file_timestamp or datetime(2024, 1, 1, tzinfo=None)
+        return file_timestamp or datetime(2024, 1, 1)
     finally:
         db.close()
 
 
 def write_timestamp(metric_type: str, timestamp: datetime, user_id: str = "1"):
     """Write the last processed timestamp for a specific metric type to file and database."""
-    # Ensure timestamp is timezone-naive for consistent storage
-    if timestamp.tzinfo is not None:
-        timestamp = timestamp.replace(tzinfo=None)
+    # Convert to UTC timezone-naive for consistent storage
+    utc_timestamp = convert_to_utc(timestamp)
+
+    if utc_timestamp is None:
+        logger.error(f"Failed to convert timestamp {timestamp} to UTC")
+        return
 
     # Write to file
     timestamp_file = f"last_timestamp_{metric_type}_user_{user_id}.txt"
     try:
         with open(timestamp_file, "w") as f:
-            f.write(timestamp.isoformat())
-        logger.info(f"Wrote timestamp to file {timestamp_file}: {timestamp}")
+            f.write(utc_timestamp.isoformat())
+        logger.info(f"Wrote UTC timestamp to file {timestamp_file}: {utc_timestamp}")
     except Exception as e:
         logger.error(f"Error writing timestamp to file: {e}")
 
@@ -182,7 +208,7 @@ def write_timestamp(metric_type: str, timestamp: datetime, user_id: str = "1"):
     db = DBOperations(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD)
     try:
         if db.connect():
-            db.update_last_processed_date(metric_type, int(user_id), timestamp)
+            db.update_last_processed_date(metric_type, int(user_id), utc_timestamp)
     except Exception as e:
         logger.error(f"Error writing timestamp to database: {e}")
     finally:

@@ -1,8 +1,40 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 
 logger = logging.getLogger("Models")
+
+
+def convert_to_utc(timestamp_input) -> datetime:
+    """Convert timestamp to UTC datetime (timezone-naive for database storage)"""
+    try:
+        # Handle different input types
+        if isinstance(timestamp_input, str):
+            # Parse string timestamp
+            if "T" in timestamp_input:
+                # ISO format: "2024-01-01T00:00:00" or "2024-01-01T00:00:00.000"
+                if "." in timestamp_input:
+                    dt = datetime.fromisoformat(timestamp_input.replace(".000", ""))
+                else:
+                    dt = datetime.fromisoformat(timestamp_input)
+            else:
+                # Date only format: "2024-01-01"
+                dt = datetime.strptime(timestamp_input, "%Y-%m-%d")
+        elif isinstance(timestamp_input, datetime):
+            dt = timestamp_input
+        else:
+            logger.error(f"Unsupported timestamp type: {type(timestamp_input)}")
+            return None
+
+        # If timezone-naive, assume it's UTC (since synthetic data is UTC)
+        if dt.tzinfo is None:
+            return dt
+
+        # Convert to UTC and remove timezone info for storage
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    except Exception as e:
+        logger.error(f"Error converting timestamp {timestamp_input} to UTC: {e}")
+        return None
 
 
 class HealthMetric:
@@ -13,7 +45,8 @@ class HealthMetric:
         self.timestamp = None
 
     def set_timestamp(self, timestamp):
-        self.timestamp = timestamp
+        """Set timestamp, ensuring it's converted to UTC"""
+        self.timestamp = convert_to_utc(timestamp)
 
     def get_flat_records(self):
         """Return list of flattened records for database insertion"""
@@ -33,7 +66,7 @@ class HeartRateMetric(HealthMetric):
         if "activities-heart" in data:
             heart_data = data["activities-heart"][0]
             self.date = heart_data["dateTime"]
-            self.timestamp = datetime.fromisoformat(self.date)
+            self.timestamp = convert_to_utc(self.date)
 
             if "value" in heart_data and isinstance(heart_data["value"], dict):
                 if "restingHeartRate" in heart_data["value"]:
@@ -58,52 +91,60 @@ class HeartRateMetric(HealthMetric):
                 time_str = entry["time"]
                 value = entry["value"]
 
-                # Create timestamp by combining date and time
+                # Create timestamp by combining date and time, then convert to UTC
                 if self.date:
-                    timestamp = datetime.fromisoformat(f"{self.date}T{time_str}")
+                    timestamp_str = f"{self.date}T{time_str}"
+                    timestamp = convert_to_utc(timestamp_str)
 
-                    records.append(
-                        {
-                            "table": "heart_rate",
-                            "user_id": self.user_id,
-                            "device_id": self.device_id,
-                            "timestamp": timestamp,
-                            "value": value,
-                            "resting_heart_rate": self.resting_heart_rate,
-                        }
-                    )
+                    if timestamp:
+                        records.append(
+                            {
+                                "table": "heart_rate",
+                                "user_id": self.user_id,
+                                "device_id": self.device_id,
+                                "timestamp": timestamp,
+                                "value": value,
+                                "resting_heart_rate": self.resting_heart_rate,
+                            }
+                        )
             except (KeyError, ValueError) as e:
                 logger.error(f"Error processing heart rate intraday data: {e}")
 
         # If no intraday data but we have a date, create at least one record
         if not records and self.date:
-            records.append(
-                {
-                    "table": "heart_rate",
-                    "user_id": self.user_id,
-                    "device_id": self.device_id,
-                    "timestamp": self.timestamp,
-                    "value": None,
-                    "resting_heart_rate": self.resting_heart_rate,
-                }
-            )
+            utc_timestamp = convert_to_utc(self.date)
+            if utc_timestamp:
+                records.append(
+                    {
+                        "table": "heart_rate",
+                        "user_id": self.user_id,
+                        "device_id": self.device_id,
+                        "timestamp": utc_timestamp,
+                        "value": None,
+                        "resting_heart_rate": self.resting_heart_rate,
+                    }
+                )
 
         # Process heart rate zones
         for zone in self.zones:
             try:
-                records.append(
-                    {
-                        "table": "heart_rate_zones",
-                        "user_id": self.user_id,
-                        "device_id": self.device_id,
-                        "timestamp": self.timestamp,
-                        "zone_name": zone.get("name"),
-                        "min_hr": zone.get("min"),
-                        "max_hr": zone.get("max"),
-                        "minutes": zone.get("minutes"),
-                        "calories_out": zone.get("caloriesOut"),
-                    }
+                utc_timestamp = (
+                    convert_to_utc(self.date) if self.date else self.timestamp
                 )
+                if utc_timestamp:
+                    records.append(
+                        {
+                            "table": "heart_rate_zones",
+                            "user_id": self.user_id,
+                            "device_id": self.device_id,
+                            "timestamp": utc_timestamp,
+                            "zone_name": zone.get("name"),
+                            "min_hr": zone.get("min"),
+                            "max_hr": zone.get("max"),
+                            "minutes": zone.get("minutes"),
+                            "calories_out": zone.get("caloriesOut"),
+                        }
+                    )
             except (KeyError, ValueError) as e:
                 logger.error(f"Error processing heart rate zone: {e}")
 
@@ -127,18 +168,19 @@ class SpO2Metric(HealthMetric):
 
         for minute_data in self.minutes:
             try:
-                timestamp = datetime.fromisoformat(minute_data["minute"])
+                timestamp = convert_to_utc(minute_data["minute"])
                 value = minute_data["value"]
 
-                records.append(
-                    {
-                        "table": "spo2",
-                        "user_id": self.user_id,
-                        "device_id": self.device_id,
-                        "timestamp": timestamp,
-                        "value": value,
-                    }
-                )
+                if timestamp:
+                    records.append(
+                        {
+                            "table": "spo2",
+                            "user_id": self.user_id,
+                            "device_id": self.device_id,
+                            "timestamp": timestamp,
+                            "value": value,
+                        }
+                    )
             except (KeyError, ValueError) as e:
                 logger.error(f"Error processing SpO2 minute data: {e}")
 
@@ -159,21 +201,22 @@ class HRVMetric(HealthMetric):
 
         for minute_data in self.minutes:
             try:
-                timestamp = datetime.fromisoformat(minute_data["minute"])
+                timestamp = convert_to_utc(minute_data["minute"])
                 value = minute_data.get("value", {})
 
-                records.append(
-                    {
-                        "table": "hrv",
-                        "user_id": self.user_id,
-                        "device_id": self.device_id,
-                        "timestamp": timestamp,
-                        "rmssd": value.get("rmssd"),
-                        "coverage": value.get("coverage"),
-                        "hf": value.get("hf"),
-                        "lf": value.get("lf"),
-                    }
-                )
+                if timestamp:
+                    records.append(
+                        {
+                            "table": "hrv",
+                            "user_id": self.user_id,
+                            "device_id": self.device_id,
+                            "timestamp": timestamp,
+                            "rmssd": value.get("rmssd"),
+                            "coverage": value.get("coverage"),
+                            "hf": value.get("hf"),
+                            "lf": value.get("lf"),
+                        }
+                    )
             except (KeyError, ValueError) as e:
                 logger.error(f"Error processing HRV minute data: {e}")
 
@@ -192,7 +235,7 @@ class BreathingRateMetric(HealthMetric):
     def set_data(self, data):
         if "dateTime" in data:
             self.date = data["dateTime"]
-            self.timestamp = datetime.fromisoformat(data["dateTime"])
+            self.timestamp = convert_to_utc(data["dateTime"])
         if "value" in data:
             value = data["value"]
             if (
@@ -255,25 +298,29 @@ class ActiveZoneMinutesMetric(HealthMetric):
                 minute_str = minute_data["minute"]
                 # Handle different time formats
                 if "T" in minute_str:
-                    timestamp = datetime.fromisoformat(minute_str)
+                    timestamp = convert_to_utc(minute_str)
                 else:
                     # Assuming format like "08:30:00" with date from self.date
-                    timestamp = datetime.fromisoformat(f"{self.date}T{minute_str}")
+                    timestamp_str = f"{self.date}T{minute_str}"
+                    timestamp = convert_to_utc(timestamp_str)
 
                 value = minute_data.get("value", {})
 
-                records.append(
-                    {
-                        "table": "active_zone_minutes",
-                        "user_id": self.user_id,
-                        "device_id": self.device_id,
-                        "timestamp": timestamp,
-                        "fat_burn_minutes": value.get("fatBurnActiveZoneMinutes", 0),
-                        "cardio_minutes": value.get("cardioActiveZoneMinutes", 0),
-                        "peak_minutes": value.get("peakActiveZoneMinutes", 0),
-                        "active_zone_minutes": value.get("activeZoneMinutes", 0),
-                    }
-                )
+                if timestamp:
+                    records.append(
+                        {
+                            "table": "active_zone_minutes",
+                            "user_id": self.user_id,
+                            "device_id": self.device_id,
+                            "timestamp": timestamp,
+                            "fat_burn_minutes": value.get(
+                                "fatBurnActiveZoneMinutes", 0
+                            ),
+                            "cardio_minutes": value.get("cardioActiveZoneMinutes", 0),
+                            "peak_minutes": value.get("peakActiveZoneMinutes", 0),
+                            "active_zone_minutes": value.get("activeZoneMinutes", 0),
+                        }
+                    )
             except (KeyError, ValueError) as e:
                 logger.error(f"Error processing AZM minute data: {e}")
 
@@ -289,7 +336,7 @@ class ActivityMetric(HealthMetric):
     def set_data(self, data):
         if "dateTime" in data:
             self.date = data["dateTime"]
-            self.timestamp = datetime.fromisoformat(data["dateTime"])
+            self.timestamp = convert_to_utc(data["dateTime"])
         if "value" in data:
             self.value = data["value"]
 

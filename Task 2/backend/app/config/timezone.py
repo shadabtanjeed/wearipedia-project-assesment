@@ -1,3 +1,3 @@
 import pytz
 
-GMT6 = pytz.timezone("Asia/Dhaka")
+GMT6 = pytz.timezone("UTC")

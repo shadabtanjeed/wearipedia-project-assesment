@@ -1,4 +1,4 @@
-- Be mindful of the timezone declared globally
+- In the config file, there is a variable called GMT6, which is used in all other api endpoints. Initially the db was storing the date in GMT6, but now it is storing in UTC. This variable is not used anymore, but I have kept it for future use if needed.
 - Talk about why using  SQL query instead of ORM
 
 Knows Issues:
