@@ -26,7 +26,7 @@ def get_all_activity_data(
 
         # Set timezone for this connection
         with conn.cursor() as tz_cursor:
-            tz_cursor.execute("SET TIME ZONE '+06:00'")
+            tz_cursor.execute("SET TIME ZONE 'UTC'")
 
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
@@ -78,5 +78,3 @@ def get_all_activity_data(
     finally:
         if cursor:
             cursor.close()
-        if conn:
-            conn.close()

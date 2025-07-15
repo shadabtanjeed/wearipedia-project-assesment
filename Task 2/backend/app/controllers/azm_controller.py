@@ -26,7 +26,7 @@ def get_all_azm_data(
 
         # Set timezone for this connection
         with conn.cursor() as tz_cursor:
-            tz_cursor.execute("SET TIME ZONE '+06:00'")
+            tz_cursor.execute("SET TIME ZONE 'UTC'")
 
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
@@ -107,7 +107,7 @@ def get_daily_avg_azm_data(
 
         # Set timezone for this connection
         with conn.cursor() as tz_cursor:
-            tz_cursor.execute("SET TIME ZONE '+06:00'")
+            tz_cursor.execute("SET TIME ZONE 'UTC'")
 
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
