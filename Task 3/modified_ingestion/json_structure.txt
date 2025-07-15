@@ -1,0 +1,205 @@
+================================================================================
+Activity
+================================================================================
+Schema Structure:
+[Array Items]:
+    dateTime: str
+    value: int
+    user_id: int
+
+Array length: 30
+First item keys: 3
+
+
+--------------------------------------------------------------------------------
+
+================================================================================
+Active Zone Minutes (azm)
+================================================================================
+
+Schema Structure:
+[Array Items]:
+    activities-active-zone-minutes-intraday: [Array of Objects]
+        dateTime: str
+        minutes: [Array of Objects]
+            minute: str
+            value:
+                fatBurnActiveZoneMinutes: int
+                activeZoneMinutes: int
+    user_id: int
+
+Array length: 30
+First item keys: 2
+
+--------------------------------------------------------------------------------
+
+================================================================================
+Breathing Rate (br)
+================================================================================
+
+Schema Structure:
+[Array Items]:
+    br: [Array of Objects]
+        value:
+            deepSleepSummary:
+                breathingRate: float
+            remSleepSummary:
+                breathingRate: float
+            lightSleepSummary:
+                breathingRate: float
+            fullSleepSummary:
+                breathingRate: float
+        dateTime: str
+    user_id: int
+
+Array length: 30
+First item keys: 2
+
+--------------------------------------------------------------------------------
+
+
+================================================================================
+Complete/Merged User Data (complete_user1_modified.json and complete_user2_modified.json)
+================================================================================
+
+Schema Structure:
+br: [Array of Objects]
+    br: [Array of Objects]
+        value:
+            deepSleepSummary:
+                breathingRate: float
+            remSleepSummary:
+                breathingRate: float
+            lightSleepSummary:
+                breathingRate: float
+            fullSleepSummary:
+                breathingRate: float
+        dateTime: str
+    user_id: int
+azm: [Array of Objects]
+    activities-active-zone-minutes-intraday: [Array of Objects]
+        dateTime: str
+        minutes: [Array of Objects]
+            minute: str
+            value:
+                fatBurnActiveZoneMinutes: int
+                activeZoneMinutes: int
+    user_id: int
+activity: [Array of Objects]
+    dateTime: str
+    value: int
+    user_id: int
+hr: [Array of Objects]
+    heart_rate_day: [Array of Objects]
+        activities-heart: [Array of Objects]
+            dateTime: str
+            value:
+                customHeartRateZones: list
+                heartRateZones: [Array of Objects]
+                    caloriesOut: float
+                    max: int
+                    min: int
+                    minutes: int
+                    name: str
+                restingHeartRate: int
+        activities-heart-intraday:
+            dataset: [Array of Objects]
+                time: str
+                value: int
+            datasetInterval: int
+            datasetType: str
+    user_id: int
+hrv: [Array of Objects]
+    hrv: [Array of Objects]
+        minutes: [Array of Objects]
+            minute: str
+            value:
+                rmssd: float
+                coverage: float
+                hf: float
+                lf: float
+        dateTime: str
+    user_id: int
+spo2: [Array of Objects]
+    dateTime: str
+    minutes: [Array of Objects]
+        value: float
+        minute: str
+    user_id: int
+
+Top-level keys: 6
+
+--------------------------------------------------------------------------------
+
+
+================================================================================
+Heart Rate Variability (hrv)
+================================================================================
+
+Schema Structure:
+[Array Items]:
+    hrv: [Array of Objects]
+        minutes: [Array of Objects]
+            minute: str
+            value:
+                rmssd: float
+                coverage: float
+                hf: float
+                lf: float
+        dateTime: str
+    user_id: int
+
+Array length: 30
+First item keys: 2
+
+--------------------------------------------------------------------------------
+
+
+================================================================================
+Heart Rate (hr)
+================================================================================
+
+Schema Structure:
+[Array Items]:
+    heart_rate_day: [Array of Objects]
+        activities-heart: [Array of Objects]
+            dateTime: str
+            value:
+                customHeartRateZones: list
+                heartRateZones: [Array of Objects]
+                    caloriesOut: float
+                    max: int
+                    min: int
+                    minutes: int
+                    name: str
+                restingHeartRate: int
+        activities-heart-intraday:
+            dataset: [Array of Objects]
+                time: str
+                value: int
+            datasetInterval: int
+            datasetType: str
+    user_id: int
+
+Array length: 30
+First item keys: 2
+
+--------------------------------------------------------------------------------
+
+
+================================================================================
+spo2 (Saturation of Peripheral Oxygen)
+================================================================================
+
+Schema Structure:
+[Array Items]:
+    dateTime: str
+    minutes: [Array of Objects]
+        value: float
+        minute: str
+    user_id: int
+
+Array length: 30
+First item keys: 3
+
+--------------------------------------------------------------------------------
