@@ -4,14 +4,14 @@ import pytz
 from psycopg2.extras import RealDictCursor
 from typing import List, Dict, Any
 
+from main import GMT6
+
 
 def get_all_azm_data(user_id, start_date, end_date):
-    gmt6 = pytz.timezone("Asia/Dhaka")
-
     if start_date.tzinfo is None:
-        start_date = gmt6.localize(start_date)
+        start_date = GMT6.localize(start_date)
     if end_date.tzinfo is None:
-        end_date = gmt6.localize(end_date)
+        end_date = GMT6.localize(end_date)
 
     with get_db_connection() as conn:
         with conn.cursor() as cursor:
@@ -36,12 +36,10 @@ def get_all_azm_data(user_id, start_date, end_date):
 
 
 def get_daily_avg_azm_data(user_id, start_date, end_date):
-    gmt6 = pytz.timezone("Asia/Dhaka")
-
     if start_date.tzinfo is None:
-        start_date = gmt6.localize(start_date)
+        start_date = GMT6.localize(start_date)
     if end_date.tzinfo is None:
-        end_date = gmt6.localize(end_date)
+        end_date = GMT6.localize(end_date)
 
     with get_db_connection() as conn:
         with conn.cursor() as cursor:
