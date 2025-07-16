@@ -74,8 +74,15 @@ Set up your environment and run the Python script to initialize aggregations:
 
 ```bash
 cd "Task 3/db_optimizations/heart_rate_aggregations"
-python run_aggregations.py --setup
+python run_aggregations.py setup
 ```
+
+In case the view heart_rate_1m is not updated, you will need to manually execute the following sql command:
+```sql
+CALL refresh_continuous_aggregate('heart_rate_1m', '2024-01-01 00:00:00.0000000', '2024-01-31 23:59:00.000000');
+```
+
+This issue has been acknowledged and will be fixed later.
 
 ### 4. Refresh Aggregations
 
