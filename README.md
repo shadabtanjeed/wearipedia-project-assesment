@@ -2,7 +2,7 @@
 
 This repository contains solutions to seven tasks related to the Wearipedia project assessment. Each task resides in its own directory, accompanied by a README file explaining the task and its solution. For further details, refer to the respective branches.
 
-- **Tasks 0a to 3** were completed by **15th July 2025, 12 PM PST** and are available in the `main` branch. (You might still some push beyond this time, those are mainly updates to the readme files)
+- **Tasks 0a to 3** were completed by **15th July 2025, 12 PM PST** and are available in the `main` branch. (You might still notice some push operations beyond this time, those are mainly updates to the readme files)
 - **Tasks 4 to 6** are being developed in their respective branches and will not be merged into `main` since they were done outside the designated timeframe (This README will be updated once those tasks are finished.)
 
 ## Getting Started
